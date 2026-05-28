@@ -44,6 +44,11 @@
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.6"
   },
+  "overrides": {
+    "next-auth": {
+      "nodemailer": "$nodemailer"
+    }
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
