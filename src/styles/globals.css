@@ -1,0 +1,266 @@
+@import "tailwindcss";
+@import "./custom-components.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Nature-Inspired Palette - bound to CSS variables so they switch with .dark */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius: 0.5rem;
+}
+
+:root {
+  /* Frogtask "Lily Pond" palette. Primary is emerald-600 (#059669); secondary
+     is the lighter emerald-500 used for the brand-mark gradient and
+     highlights; accent uses emerald-100 for subtle hover surfaces. Body
+     background is a soft mint-tinted white so cards stand out cleanly. */
+  --background: #ffffff;
+  --foreground: #0c1f15;
+  --card: #ffffff;
+  --card-foreground: #0c1f15;
+  --popover: #ffffff;
+  --popover-foreground: #0c1f15;
+  --primary: #059669;
+  --primary-foreground: #ffffff;
+  --secondary: #10b981;
+  --secondary-foreground: #ffffff;
+  --muted: #ecfdf5;
+  --muted-foreground: #4b6358;
+  --accent: #d1fae5;
+  --accent-foreground: #064e3b;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #d1fae5;
+  --input: #d1fae5;
+  --ring: #059669;
+  --body-bg: #f4fbf7;
+}
+
+.dark {
+  --background: #0a1612;
+  --foreground: #d1fae5;
+  --card: #0f1f1a;
+  --card-foreground: #d1fae5;
+  --popover: #0f1f1a;
+  --popover-foreground: #d1fae5;
+  --primary: #34d399;
+  --primary-foreground: #052e1f;
+  --secondary: #10b981;
+  --secondary-foreground: #052e1f;
+  --muted: #14241d;
+  --muted-foreground: #8aa89a;
+  --accent: #064e3b;
+  --accent-foreground: #d1fae5;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1a2e26;
+  --input: #1a2e26;
+  --ring: #34d399;
+  --body-bg: #0a1612;
+  color-scheme: dark;
+}
+
+body {
+  font-family:
+    var(--font-inter),
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background-color: var(--body-bg);
+  color: var(--foreground);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+/*
+ * Always reserve space for the vertical scrollbar so pop-overs / dialogs /
+ * dropdowns (Radix applies `overflow:hidden` + padding-right on body when
+ * they open) don't push the page contents horizontally. `scrollbar-gutter:
+ * stable` keeps the gutter even when no scrollbar is currently needed.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
+/*
+ * When a Radix Dialog / AlertDialog / Sheet opens it uses
+ * `react-remove-scroll` under the hood, which sets
+ * `data-scroll-locked` on <body> AND adds `margin-right: <scrollbar>px !important`
+ * to compensate for a removed scrollbar. Since `scrollbar-gutter: stable`
+ * on <html> already reserves that space, the extra body margin would
+ * double-shift the page contents inward when a modal opens — the
+ * background visibly jumps a few pixels to the left.
+ *
+ * Override it: we use a double attribute selector to raise specificity
+ * above Radix's own rule (both are !important, but higher specificity
+ * wins). padding-right is zeroed for the same reason in case any variant
+ * (gapMode="padding") is used.
+ */
+body[data-scroll-locked][data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Prevent iOS zoom on focus by ensuring 16px inputs on small screens */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Make raw <table> elements horizontally scrollable on small screens */
+@media (max-width: 768px) {
+  .table-scroll-wrapper,
+  .overflow-auto-mobile {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Used by horizontally-scrolling kanban / tab strips so the scrollbar
+   doesn't visually fight the chrome above and below it. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ─── Project Management — kanban styles ─────────────────────────────
+ * Scoped utility classes used by the kanban board and card detail
+ * drawer. Kept here so we can tune them centrally.
+ */
+.kanban-scroller {
+  /* horizontal scroll with snap — the columns stop on neat boundaries */
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.kanban-column {
+  scroll-snap-align: start;
+}
+/* card placeholder while dragging */
+.kanban-drop-target {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.kanban-card-dragging {
+  opacity: 0.5;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Print layout
+ *
+ * When window.print() is invoked while an element marked with
+ * [data-print-root] is in the DOM, only that element and its descendants
+ * are rendered on the printed page. The dashboard shell, sidebar,
+ * header, toasts, modals and buttons marked with [data-print="hide"]
+ * are suppressed.
+ *
+ * Usage:
+ *   <div data-print-root>          ← the invoice document
+ *     <InvoiceDocument ... />
+ *   </div>
+ *
+ *   <button data-print="hide">     ← anything inside data-print-root
+ *     Print                        that should still disappear on print
+ *   </button>
+ * ─────────────────────────────────────────────────────────────────────
+ */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* 1. Hide everything by default. */
+  body * {
+    visibility: hidden;
+  }
+
+  /* 2. Re-show the invoice document and all its children. */
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+
+  /* 3. Elements explicitly marked as hide-on-print stay hidden. */
+  [data-print="hide"],
+  [data-print="hide"] * {
+    visibility: hidden !important;
+    display: none !important;
+  }
+
+  /* 4. Pull the invoice to the page origin. */
+  [data-print-root] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+
+  /* 5. Flatten shells/cards for a clean paper look. */
+  [data-print-root] *,
+  [data-print-root] {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* 6. Table rows should stay together across page breaks. */
+  [data-print-root] table {
+    page-break-inside: auto;
+  }
+  [data-print-root] tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  [data-print-root] thead {
+    display: table-header-group;
+  }
+}

@@ -1,0 +1,321 @@
+/* ============================================
+   Custom Component Styles
+   ============================================ */
+
+/* Form inputs — soft-filled rounded look (blue-tinted) */
+.custom-input {
+  @apply h-11 rounded-xl border border-transparent bg-muted/70 px-3.5
+         text-sm text-foreground placeholder:text-muted-foreground
+         shadow-none transition-colors
+         hover:bg-muted
+         focus-visible:bg-card focus-visible:border-primary
+         focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none;
+}
+
+.custom-input-sm {
+  @apply h-9 rounded-xl border border-transparent bg-muted/70 px-3
+         text-sm text-foreground placeholder:text-muted-foreground
+         shadow-none transition-colors
+         hover:bg-muted
+         focus-visible:bg-card focus-visible:border-primary
+         focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none;
+}
+
+.custom-textarea {
+  @apply resize-none min-h-[140px] rounded-xl border border-transparent bg-muted/70
+         px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground
+         shadow-none transition-colors
+         hover:bg-muted
+         focus-visible:bg-card focus-visible:border-primary
+         focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none;
+}
+
+/* Card shadows - consistent elevation */
+.card-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.card-shadow-lg {
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Button hover states */
+.btn-icon-hover {
+  @apply h-10 w-10 hover:bg-primary/10 hover:text-primary transition-colors;
+}
+
+/* Notification dot */
+.notification-dot {
+  @apply h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0;
+}
+
+/* Avatar status indicator */
+.avatar-status-dot {
+  @apply absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-primary;
+}
+
+/* Table action buttons */
+.table-action-btn {
+  @apply p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors;
+}
+
+.table-action-btn-delete {
+  @apply p-2 text-muted-foreground hover:text-red-600 hover:bg-red-500/10 rounded-lg transition-colors;
+}
+
+/* Pagination button active state */
+.pagination-btn-active {
+  @apply bg-primary text-white;
+}
+
+.pagination-btn-inactive {
+  @apply text-muted-foreground hover:bg-muted;
+}
+
+/* Sortable header trigger — used by `SortableTableHead` */
+.table-sort-btn {
+  @apply -m-2 inline-flex select-none items-center gap-1.5 rounded-md
+         px-2 py-1 text-xs font-semibold uppercase tracking-wider
+         text-muted-foreground transition-colors
+         hover:bg-primary/10 hover:text-primary
+         focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none;
+}
+
+.table-sort-btn[data-active="true"] {
+  @apply bg-primary/10 text-primary;
+}
+
+/* Empty state container */
+.empty-state {
+  @apply flex flex-col items-center justify-center py-20;
+}
+
+/* Menu item hover state */
+.menu-item-hover {
+  @apply hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary;
+}
+
+/* Dropdown item hover */
+.dropdown-item-hover {
+  @apply px-2 py-3 hover:bg-primary/10 hover:text-primary rounded-md cursor-pointer transition-colors;
+}
+
+/* Table header */
+.table-header-cell {
+  @apply cursor-pointer select-none py-3.5 px-4 font-medium text-muted-foreground text-sm;
+}
+
+/* Table data cell */
+.table-data-cell {
+  @apply py-4 px-4 text-sm text-foreground/80;
+}
+
+/* Avatar circle in table */
+.table-avatar {
+  @apply h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center flex-shrink-0;
+}
+
+.table-avatar-text {
+  @apply text-sm font-semibold text-primary;
+}
+
+/* React Select Custom Styles (CSS Variables) */
+:root {
+  --select-border-color: var(--primary);
+  --select-bg-color: var(--card);
+  --select-soft-bg: color-mix(in srgb, var(--muted) 70%, transparent);
+  --select-hover-bg: color-mix(in srgb, var(--primary) 10%, transparent);
+  --select-active-bg: color-mix(in srgb, var(--primary) 15%, transparent);
+  --select-text-color: var(--foreground);
+  --select-placeholder-color: var(--muted-foreground);
+  --select-indicator-color: var(--muted-foreground);
+}
+
+/* React Select container classes — match the soft-filled input style */
+.react-select-container .react-select__control {
+  min-height: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border-width: 1px;
+  border-color: transparent;
+  border-style: solid;
+  background-color: var(--select-soft-bg);
+  box-shadow: none;
+  outline: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.react-select-container .react-select__control:hover {
+  border-color: transparent;
+  background-color: var(--muted);
+}
+
+.react-select-container .react-select__control--is-focused {
+  border-color: var(--select-border-color);
+  background-color: var(--select-bg-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.react-select-container .react-select__menu {
+  background-color: var(--select-bg-color);
+  border: 1px solid var(--select-border-color);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  z-index: 50;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.react-select-container .react-select__menu-list {
+  padding: 4px;
+}
+
+.react-select-container .react-select__option {
+  background-color: var(--select-bg-color);
+  color: var(--select-text-color);
+  cursor: pointer;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.react-select-container .react-select__option--is-focused {
+  background-color: var(--select-hover-bg);
+}
+
+.react-select-container .react-select__option:active {
+  background-color: var(--select-active-bg);
+}
+
+.react-select-container .react-select__single-value {
+  color: var(--select-text-color);
+  font-size: 0.875rem;
+}
+
+.react-select-container .react-select__input {
+  color: var(--select-text-color);
+  margin: 0;
+  padding: 0;
+}
+
+.react-select-container .react-select__placeholder {
+  color: var(--select-placeholder-color);
+  font-size: 0.875rem;
+}
+
+.react-select-container .react-select__value-container {
+  padding: 0 12px;
+  height: 44px;
+}
+
+.react-select-container .react-select__indicators {
+  height: 44px;
+}
+
+.react-select-container .react-select__indicator-separator {
+  display: none;
+}
+
+.react-select-container .react-select__clear-indicator {
+  color: var(--select-indicator-color);
+  padding: 8px;
+}
+
+.react-select-container .react-select__clear-indicator:hover {
+  color: var(--select-border-color);
+  background-color: transparent;
+}
+
+.react-select-container .react-select__dropdown-indicator {
+  color: var(--select-indicator-color);
+  padding: 8px;
+  transition: all 0.2s ease;
+}
+
+.react-select-container .react-select__dropdown-indicator:hover {
+  color: var(--select-border-color);
+  background-color: transparent;
+}
+
+/* Animation classes */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-custom {
+  animation: spin 1s linear infinite;
+}
+
+/* ============================================
+   Sonner toast — close (×) button override
+   Beats sonner's inline defaults. Pinned to the
+   right-vertical-center of the toast with a clean
+   white ring so it pops on any variant.
+   ============================================ */
+[data-sonner-toaster] [data-close-button] {
+  position: absolute !important;
+  top: 50% !important;
+  right: 12px !important;
+  left: auto !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 9999px !important;
+  background-color: #ffffff !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: 0 4px 14px -4px rgba(15, 23, 42, 0.18) !important;
+  color: #64748b !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  transition:
+    transform 0.2s ease-out,
+    box-shadow 0.2s ease-out,
+    color 0.2s ease-out !important;
+}
+
+.dark [data-sonner-toaster] [data-close-button] {
+  background-color: #ffffff !important;
+  color: #475569 !important;
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.55) !important;
+}
+
+[data-sonner-toaster] [data-close-button]:hover {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  transform: translateY(-50%) scale(1.12) rotate(90deg) !important;
+  box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.28) !important;
+}
+
+[data-sonner-toaster] [data-close-button]:active {
+  transform: translateY(-50%) scale(0.95) rotate(90deg) !important;
+}
+
+[data-sonner-toaster] [data-close-button]:focus,
+[data-sonner-toaster] [data-close-button]:focus-visible {
+  outline: none !important;
+  box-shadow:
+    0 0 0 3px rgba(5, 150, 105, 0.25),
+    0 4px 14px -4px rgba(15, 23, 42, 0.18) !important;
+}
+
+[data-sonner-toaster] [data-close-button] svg {
+  width: 14px !important;
+  height: 14px !important;
+  stroke-width: 2.5 !important;
+}
