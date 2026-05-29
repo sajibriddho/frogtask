@@ -179,15 +179,21 @@ export default function DashboardPage() {
   }, [fetchToday, fetchUpcoming]);
 
   // ── Counts ─────────────────────────────────────────────────────────
+  // Overdue carry-overs live in the /today Unfinished tab — keep the dashboard
+  // summary scoped to today's schedule only.
+  const todayOnly = React.useMemo(
+    () => today.filter((t) => !t.is_overdue),
+    [today],
+  );
   const counts = React.useMemo(() => {
     let pending = 0;
     let completed = 0;
-    for (const t of today) {
+    for (const t of todayOnly) {
       if (t.instance?.status === "completed") completed++;
       else pending++;
     }
-    return { total: today.length, pending, completed };
-  }, [today]);
+    return { total: todayOnly.length, pending, completed };
+  }, [todayOnly]);
 
   const upcomingCount = React.useMemo(() => {
     const todayIso = isoDay(startOfTodayUtc());
@@ -392,14 +398,19 @@ export default function DashboardPage() {
                   />
                 ))}
               </div>
-            ) : today.length === 0 ? (
+            ) : todayOnly.length === 0 ? (
               <EmptyTodayInline canCreate={canCreateTask} onCreate={() => setCreateOpen(true)} />
             ) : (
               <ul className="divide-y divide-border">
-                {today.slice(0, 6).map((item) => {
+                {todayOnly
+                  .slice(0, 6)
+                  .map((item) => {
                   const completed = item.instance?.status === "completed";
                   return (
-                    <li key={item.id} className="flex items-start gap-3 px-5 py-3">
+                    <li
+                      key={item.instance?.id ?? item.id}
+                      className="flex items-start gap-3 px-5 py-3"
+                    >
                       <div className="pt-0.5">
                         <Checkbox
                           checked={completed}
@@ -444,13 +455,13 @@ export default function DashboardPage() {
                     </li>
                   );
                 })}
-                {today.length > 6 && canSeeToday && (
+                {todayOnly.length > 6 && canSeeToday && (
                   <li className="px-5 py-3 text-center">
                     <Link
                       href="/today"
                       className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
                     >
-                      + {today.length - 6} more in Today
+                      + {todayOnly.length - 6} more in Today
                     </Link>
                   </li>
                 )}

@@ -77,7 +77,11 @@ export interface TaskInstance {
 
 /** Today's-tasks API response shape — task rule + the user's instance for today. */
 export interface TodayTask extends Task {
-  instance: TaskInstance;
+  instance: TaskInstance | null;
+  /** True when the instance is from a previous day and still unfinished. */
+  is_overdue?: boolean;
+  /** Original task_date for overdue instances (ISO date). */
+  overdue_date?: string;
 }
 
 /** Calendar feed bucket — a date with the tasks scheduled to occur on it. */

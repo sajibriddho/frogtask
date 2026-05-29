@@ -19,13 +19,15 @@ import {
   ListChecks,
   RotateCcw,
   Tag as TagIcon,
+  AlertTriangle,
+  CalendarClock,
 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { parseJsonSafe } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
-import { formatScheduleSummary } from "@/lib/task-schedule";
+import { formatScheduleSummary, formatTaskDate } from "@/lib/task-schedule";
 import type {
   TaskPriority,
   TaskScheduleType,
@@ -66,7 +68,7 @@ const SCHEDULE_LABEL: Record<TaskScheduleType, string> = {
   weekly: "Weekly",
 };
 
-type FilterChip = "all" | "pending" | "completed";
+type FilterChip = "all" | "pending" | "completed" | "unfinished";
 
 const UNTAGGED_KEY = "__untagged__";
 const UNTAGGED_LABEL = "Untagged";
@@ -131,25 +133,44 @@ export default function TodayTasksPage() {
     return m;
   }, [tags]);
 
+  // Split the response: today's instances (today_date) vs. carried-over
+  // unfinished instances from prior days. The Unfinished tab owns the latter
+  // exclusively — they are NOT counted in All/Pending/Completed.
+  const { todayItems, overdueItems } = React.useMemo(() => {
+    const todayItems: TodayTask[] = [];
+    const overdueItems: TodayTask[] = [];
+    for (const it of items) {
+      if (it.is_overdue) overdueItems.push(it);
+      else todayItems.push(it);
+    }
+    return { todayItems, overdueItems };
+  }, [items]);
+
   const counts = React.useMemo(() => {
     let pending = 0;
     let completed = 0;
-    for (const it of items) {
+    for (const it of todayItems) {
       if (it.instance?.status === "completed") completed++;
       else pending++;
     }
-    return { all: items.length, pending, completed };
-  }, [items]);
+    return {
+      all: todayItems.length,
+      pending,
+      completed,
+      unfinished: overdueItems.length,
+    };
+  }, [todayItems, overdueItems]);
 
   const filtered = React.useMemo(() => {
-    if (filter === "all") return items;
+    if (filter === "unfinished") return overdueItems;
+    if (filter === "all") return todayItems;
     if (filter === "completed")
-      return items.filter((t) => t.instance?.status === "completed");
-    return items.filter((t) => t.instance?.status !== "completed");
-  }, [items, filter]);
+      return todayItems.filter((t) => t.instance?.status === "completed");
+    return todayItems.filter((t) => t.instance?.status !== "completed");
+  }, [todayItems, overdueItems, filter]);
 
   // Group by tag, ordered A→Z by tag name (untagged last).
-  const groups = React.useMemo(() => {
+  const tagGroups = React.useMemo(() => {
     const map = new Map<string, TodayTask[]>();
     for (const it of filtered) {
       const key = it.tag_id || UNTAGGED_KEY;
@@ -173,6 +194,22 @@ export default function TodayTasksPage() {
     });
     return entries;
   }, [filtered, tagsById]);
+
+  // Group the Unfinished tab by the original task_date — oldest at the top so
+  // the staleness is obvious. Within a date, items keep their API order.
+  const dateGroups = React.useMemo(() => {
+    if (filter !== "unfinished") return [];
+    const map = new Map<string, TodayTask[]>();
+    for (const it of overdueItems) {
+      const key = it.overdue_date ?? "";
+      const arr = map.get(key);
+      if (arr) arr.push(it);
+      else map.set(key, [it]);
+    }
+    return Array.from(map.entries())
+      .map(([date, list]) => ({ date, items: list }))
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  }, [filter, overdueItems]);
 
   const today = React.useMemo(() => new Date(), []);
   const todayLabel = today.toLocaleDateString("en-US", {
@@ -271,12 +308,14 @@ export default function TodayTasksPage() {
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {(
           [
-            { id: "all", label: "All", count: counts.all },
-            { id: "pending", label: "Pending", count: counts.pending },
-            { id: "completed", label: "Completed", count: counts.completed },
+            { id: "all", label: "All", count: counts.all, tone: "default" },
+            { id: "pending", label: "Pending", count: counts.pending, tone: "default" },
+            { id: "completed", label: "Completed", count: counts.completed, tone: "default" },
+            { id: "unfinished", label: "Unfinished", count: counts.unfinished, tone: "rose" },
           ] as const
         ).map((chip) => {
           const active = filter === chip.id;
+          const isRose = chip.tone === "rose";
           return (
             <button
               key={chip.id}
@@ -285,17 +324,24 @@ export default function TodayTasksPage() {
               className={cn(
                 "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
                 active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                  ? isRose
+                    ? "bg-rose-600 text-white shadow-sm"
+                    : "bg-primary text-primary-foreground shadow-sm"
+                  : isRose && chip.count > 0
+                    ? "bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-300"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
               )}
             >
+              {isRose && <AlertTriangle className="h-3 w-3" />}
               <span>{chip.label}</span>
               <span
                 className={cn(
                   "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
                   active
-                    ? "bg-white/20 text-primary-foreground"
-                    : "bg-card text-muted-foreground",
+                    ? "bg-white/20 text-inherit"
+                    : isRose && chip.count > 0
+                      ? "bg-rose-50 text-rose-700 dark:bg-rose-500/25 dark:text-rose-200"
+                      : "bg-card text-muted-foreground",
                 )}
               >
                 {chip.count}
@@ -305,7 +351,7 @@ export default function TodayTasksPage() {
         })}
       </div>
 
-      {/* List — grouped by tag, A → Z */}
+      {/* List — grouped by tag (today views) or by date (Unfinished, oldest first) */}
       <div className="space-y-5">
         {loading ? (
           <div className="flex items-center justify-center rounded-2xl border border-border bg-card py-20">
@@ -313,14 +359,31 @@ export default function TodayTasksPage() {
           </div>
         ) : filtered.length === 0 ? (
           <EmptyToday filter={filter} totalToday={counts.all} />
+        ) : filter === "unfinished" ? (
+          dateGroups.map(({ date, items: groupItems }) => (
+            <section key={date} className="space-y-2">
+              <DateGroupHeader date={date} count={groupItems.length} />
+              <div className="space-y-2">
+                {groupItems.map((item) => (
+                  <TaskRow
+                    key={item.instance?.id ?? item.id}
+                    item={item}
+                    canComplete={canComplete}
+                    onCheck={() => handleComplete(item)}
+                    onReopen={() => handleReopen(item)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))
         ) : (
-          groups.map(({ key, tag, items: groupItems }) => (
+          tagGroups.map(({ key, tag, items: groupItems }) => (
             <section key={key} className="space-y-2">
               <TagGroupHeader tag={tag} count={groupItems.length} />
               <div className="space-y-2">
                 {groupItems.map((item) => (
                   <TaskRow
-                    key={item.id}
+                    key={item.instance?.id ?? item.id}
                     item={item}
                     canComplete={canComplete}
                     onCheck={() => handleComplete(item)}
@@ -395,6 +458,33 @@ function TagGroupHeader({
         {tag?.name ?? UNTAGGED_LABEL}
       </h3>
       <span className="text-[11px] text-muted-foreground">({count})</span>
+    </div>
+  );
+}
+
+function DateGroupHeader({ date, count }: { date: string; count: number }) {
+  const daysOld = React.useMemo(() => {
+    if (!date) return 0;
+    const due = new Date(date);
+    if (Number.isNaN(due.getTime())) return 0;
+    const now = new Date();
+    const dueUtc = Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    return Math.max(0, Math.round((todayUtc - dueUtc) / 86400000));
+  }, [date]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-1">
+      <CalendarClock className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-300">
+        {formatTaskDate(date)}
+      </h3>
+      <span className="text-[11px] text-muted-foreground">({count})</span>
+      {daysOld > 0 && (
+        <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">
+          · {daysOld} day{daysOld === 1 ? "" : "s"} overdue
+        </span>
+      )}
     </div>
   );
 }
@@ -506,7 +596,10 @@ function EmptyToday({
   let description =
     "Create a task on the All Tasks page or wait for a daily / weekly task to come around.";
 
-  if (totalToday > 0) {
+  if (filter === "unfinished") {
+    title = "No unfinished tasks";
+    description = "Nothing has been left behind from earlier days — nice work.";
+  } else if (totalToday > 0) {
     if (filter === "completed") {
       title = "No completed tasks yet";
       description = "Tick a task off to see it here.";
