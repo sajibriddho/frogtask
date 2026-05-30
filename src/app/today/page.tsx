@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Circle,
   ListChecks,
+  Pencil,
   RotateCcw,
   Tag as TagIcon,
   AlertTriangle,
@@ -29,11 +30,15 @@ import { parseJsonSafe } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatScheduleSummary, formatTaskDate } from "@/lib/task-schedule";
 import type {
+  Task,
   TaskPriority,
   TaskScheduleType,
   TodayTask,
 } from "@/types/task";
 import type { TaskTag } from "@/types/task-tag";
+
+import { TaskFormModal } from "@/app/tasks/_components/TaskFormModal";
+import { ManageTagsModal } from "@/app/tasks/_components/ManageTagsModal";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -78,11 +83,16 @@ const UNTAGGED_LABEL = "Untagged";
 export default function TodayTasksPage() {
   const { has } = usePermissions();
   const canComplete = has("today.complete");
+  const canUpdate = has("tasks.all.update");
 
   const [items, setItems] = React.useState<TodayTask[]>([]);
   const [tags, setTags] = React.useState<TaskTag[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState<FilterChip>("all");
+
+  const [editingTask, setEditingTask] = React.useState<Task | null>(null);
+  const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [manageTagsOpen, setManageTagsOpen] = React.useState(false);
 
   const fetchToday = React.useCallback(async () => {
     setLoading(true);
@@ -262,6 +272,31 @@ export default function TodayTasksPage() {
     }
   };
 
+  const handleEdit = async (item: TodayTask) => {
+    try {
+      const res = await fetch(`/api/tasks/${item.id}`);
+      const data = await parseJsonSafe<{
+        success: boolean;
+        data: Task;
+        error?: string;
+      }>(res);
+      if (!data.success) {
+        toast.error(data.error || "Failed to load task");
+        return;
+      }
+      setEditingTask({ ...(data.data as Task), id: item.id });
+      setEditModalOpen(true);
+    } catch (err) {
+      console.error("openEdit (today)", err);
+      toast.error("Failed to load task");
+    }
+  };
+
+  const onTagsChanged = React.useCallback(() => {
+    fetchTags();
+    fetchToday();
+  }, [fetchTags, fetchToday]);
+
   return (
     <div className="space-y-4">
       {/* Hero / summary */}
@@ -369,8 +404,10 @@ export default function TodayTasksPage() {
                     key={item.instance?.id ?? item.id}
                     item={item}
                     canComplete={canComplete}
+                    canEdit={canUpdate}
                     onCheck={() => handleComplete(item)}
                     onReopen={() => handleReopen(item)}
+                    onEdit={() => handleEdit(item)}
                   />
                 ))}
               </div>
@@ -386,8 +423,10 @@ export default function TodayTasksPage() {
                     key={item.instance?.id ?? item.id}
                     item={item}
                     canComplete={canComplete}
+                    canEdit={false}
                     onCheck={() => handleComplete(item)}
                     onReopen={() => handleReopen(item)}
+                    onEdit={() => handleEdit(item)}
                   />
                 ))}
               </div>
@@ -396,6 +435,23 @@ export default function TodayTasksPage() {
         )}
       </div>
 
+      <TaskFormModal
+        open={editModalOpen}
+        onOpenChange={(o) => {
+          setEditModalOpen(o);
+          if (!o) setEditingTask(null);
+        }}
+        task={editingTask}
+        tags={tags}
+        onManageTags={() => setManageTagsOpen(true)}
+        onSaved={fetchToday}
+      />
+
+      <ManageTagsModal
+        open={manageTagsOpen}
+        onOpenChange={setManageTagsOpen}
+        onChanged={onTagsChanged}
+      />
     </div>
   );
 }
@@ -492,13 +548,17 @@ function DateGroupHeader({ date, count }: { date: string; count: number }) {
 function TaskRow({
   item,
   canComplete,
+  canEdit,
   onCheck,
   onReopen,
+  onEdit,
 }: {
   item: TodayTask;
   canComplete: boolean;
+  canEdit: boolean;
   onCheck: () => void;
   onReopen: () => void;
+  onEdit: () => void;
 }) {
   const completed = item.instance?.status === "completed";
 
@@ -570,17 +630,30 @@ function TaskRow({
         )}
       </div>
 
-      {completed && canComplete && (
-        <button
-          type="button"
-          onClick={onReopen}
-          className="self-start text-[11px] font-medium text-muted-foreground hover:text-primary inline-flex items-center gap-1 px-2 py-1 rounded-md"
-          title="Reopen task"
-        >
-          <RotateCcw className="h-3 w-3" />
-          Reopen
-        </button>
-      )}
+      <div className="flex flex-col items-end gap-1">
+        {completed && canComplete && (
+          <button
+            type="button"
+            onClick={onReopen}
+            className="self-start text-[11px] font-medium text-muted-foreground hover:text-primary inline-flex items-center gap-1 px-2 py-1 rounded-md"
+            title="Reopen task"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reopen
+          </button>
+        )}
+        {canEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="self-start text-[11px] font-medium text-muted-foreground hover:text-primary inline-flex items-center gap-1 px-2 py-1 rounded-md"
+            title="Edit task"
+          >
+            <Pencil className="h-3 w-3" />
+            Edit
+          </button>
+        )}
+      </div>
     </div>
   );
 }
