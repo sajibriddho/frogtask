@@ -5,8 +5,9 @@
  *
  * Lists every task the user owns. "Create task" opens TaskFormModal in
  * create mode (defaults to "Today" — one click); the row pencil opens
- * it in edit mode. Marking complete happens elsewhere (Today's Tasks);
- * this page never touches `task_instances`.
+ * it in edit mode. Daily/weekly completion still happens on the Today
+ * screen — but date-specific rules can be ticked off in-place here,
+ * since they only ever fire on a single calendar day.
  *
  * Tasks are grouped by tag (A–Z, untagged last) so the table reads as
  * tag sections. The "Manage tags" button opens a modal for CRUD on the
@@ -25,6 +26,9 @@ import {
   Calendar,
   Repeat,
   CalendarDays,
+  CheckCircle2,
+  Circle,
+  RotateCcw,
   Tag as TagIcon,
   MoreHorizontal,
 } from "lucide-react";
@@ -70,6 +74,7 @@ import type {
   TaskPriority,
   TaskScheduleType,
   TaskStatus,
+  TaskWithInstance,
 } from "@/types/task";
 import type { TaskTag } from "@/types/task-tag";
 
@@ -128,8 +133,9 @@ export default function AllTasksPage() {
   const canUpdate = has("tasks.all.update");
   const canDelete = has("tasks.all.delete");
   const canToggle = has("tasks.all.toggle");
+  const canComplete = has("today.complete");
 
-  const [list, setList] = React.useState<Task[]>([]);
+  const [list, setList] = React.useState<TaskWithInstance[]>([]);
   const [tags, setTags] = React.useState<TaskTag[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState("");
@@ -146,6 +152,7 @@ export default function AllTasksPage() {
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState(false);
   const [togglingId, setTogglingId] = React.useState<string | null>(null);
+  const [completingId, setCompletingId] = React.useState<string | null>(null);
   const [deactivateTask, setDeactivateTask] = React.useState<Task | null>(null);
 
   // ─── Data fetch ─────────────────────────────────────────────────────
@@ -155,13 +162,14 @@ export default function AllTasksPage() {
       const res = await fetch("/api/tasks");
       const data = await parseJsonSafe<{
         success: boolean;
-        data: Array<Task & { _id?: string }>;
+        data: Array<TaskWithInstance & { _id?: string }>;
         error?: string;
       }>(res);
       if (data.success) {
-        const normalised = (data.data ?? []).map((d) => ({
+        const normalised: TaskWithInstance[] = (data.data ?? []).map((d) => ({
           ...d,
           id: d.id ?? d._id ?? "",
+          instance: d.instance ?? null,
         }));
         setList(normalised);
       } else {
@@ -237,16 +245,15 @@ export default function AllTasksPage() {
   ]);
 
   type SortKey = "title" | "schedule_type" | "priority" | "status" | "createdAt";
-  const { sorted, sortKey, direction, requestSort } = useSort<Task, SortKey>(
-    filtered,
-    "createdAt",
-    "desc",
-  );
+  const { sorted, sortKey, direction, requestSort } = useSort<
+    TaskWithInstance,
+    SortKey
+  >(filtered, "createdAt", "desc");
 
   // Layer tag-grouping on top of the column sort: tag-name A→Z, untagged
   // last; within each tag preserve the active sort order.
   const groupedSorted = React.useMemo(() => {
-    const tagSortKey = (t: Task): string => {
+    const tagSortKey = (t: TaskWithInstance): string => {
       if (!t.tag_id) return "￿"; // push untagged to the end
       const meta = tagsById.get(t.tag_id);
       return meta ? meta.name.toLowerCase() : "￿";
@@ -350,6 +357,33 @@ export default function AllTasksPage() {
       setDeactivateTask(task);
     } else {
       setStatus(task, "Active");
+    }
+  };
+
+  const setCompletion = async (task: TaskWithInstance, completed: boolean) => {
+    setCompletingId(task.id);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/complete`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed }),
+      });
+      const data = await parseJsonSafe<{ success: boolean; error?: string }>(
+        res,
+      );
+      if (data.success) {
+        toast.success(
+          completed ? `"${task.title}" completed` : "Task reopened",
+        );
+        fetchTasks();
+      } else {
+        toast.error(data.error || "Failed to update completion");
+      }
+    } catch (err) {
+      console.error("toggle completion", err);
+      toast.error("Failed to update completion");
+    } finally {
+      setCompletingId(null);
     }
   };
 
@@ -537,6 +571,10 @@ export default function AllTasksPage() {
                     const meta = task.tag_id
                       ? tagsById.get(task.tag_id)
                       : undefined;
+                    const isDateSpecific = task.schedule_type === "date_specific";
+                    const completed =
+                      isDateSpecific && task.instance?.status === "completed";
+                    const completing = completingId === task.id;
                     return (
                       <React.Fragment key={task.id}>
                         {showHeader && (
@@ -552,15 +590,58 @@ export default function AllTasksPage() {
                             {start + index + 1}
                           </TableCell>
                           <TableCell className="py-4 px-4 w-[70%] align-top">
-                            <div className="min-w-0">
-                              <p className="font-medium text-sm text-foreground break-words whitespace-normal">
-                                {task.title}
-                              </p>
-                              {task.category_id && (
-                                <p className="text-xs text-muted-foreground break-words whitespace-normal">
-                                  {task.category_id}
-                                </p>
+                            <div className="flex items-start gap-3 min-w-0">
+                              {isDateSpecific && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCompletion(task, !completed)
+                                  }
+                                  disabled={!canComplete || completing}
+                                  className={cn(
+                                    "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors",
+                                    completed
+                                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                      : "text-muted-foreground hover:text-foreground",
+                                    (!canComplete || completing) &&
+                                      "cursor-not-allowed opacity-60",
+                                  )}
+                                  title={
+                                    !canComplete
+                                      ? "You don't have permission to complete tasks"
+                                      : completed
+                                        ? "Reopen task"
+                                        : "Mark task complete"
+                                  }
+                                  aria-label={
+                                    completed
+                                      ? "Reopen task"
+                                      : "Mark task complete"
+                                  }
+                                >
+                                  {completed ? (
+                                    <CheckCircle2 className="h-5 w-5" />
+                                  ) : (
+                                    <Circle className="h-5 w-5" />
+                                  )}
+                                </button>
                               )}
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className={cn(
+                                    "font-medium text-sm text-foreground break-words whitespace-normal",
+                                    completed &&
+                                      "line-through text-muted-foreground",
+                                  )}
+                                >
+                                  {task.title}
+                                </p>
+                                {task.category_id && (
+                                  <p className="text-xs text-muted-foreground break-words whitespace-normal">
+                                    {task.category_id}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </TableCell>
                           <TableCell className="py-4 px-4">
@@ -598,6 +679,26 @@ export default function AllTasksPage() {
                                     <Eye className="mr-2 h-4 w-4" />
                                     View
                                   </DropdownMenuItem>
+                                  {isDateSpecific && canComplete && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        setCompletion(task, !completed)
+                                      }
+                                      disabled={completing}
+                                    >
+                                      {completed ? (
+                                        <>
+                                          <RotateCcw className="mr-2 h-4 w-4" />
+                                          Reopen
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                                          Mark complete
+                                        </>
+                                      )}
+                                    </DropdownMenuItem>
+                                  )}
                                   {canToggle && (
                                     <DropdownMenuItem
                                       onClick={() => onToggle(task)}

@@ -84,6 +84,16 @@ export interface TodayTask extends Task {
   overdue_date?: string;
 }
 
+/**
+ * All-tasks row shape — same as Task, with the user's TaskInstance attached
+ * for date-specific rules (the rule has a single fixed `task_date`, so there
+ * is at most one instance to surface). null for daily / weekly rules and for
+ * date-specific rules the user has not yet acted on.
+ */
+export interface TaskWithInstance extends Task {
+  instance: TaskInstance | null;
+}
+
 /** Calendar feed bucket — a date with the tasks scheduled to occur on it. */
 export interface CalendarBucket {
   date: string; // YYYY-MM-DD

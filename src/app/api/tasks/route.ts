@@ -19,10 +19,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import Task from "@/model/Task";
+import TaskInstance from "@/model/TaskInstance";
 import { validateTaskPayload } from "@/lib/task-payload";
+import { toUtcMidnight } from "@/lib/task-schedule";
 
 interface RawTaskRow {
   _id: unknown;
+  schedule_type?: "date_specific" | "daily" | "weekly";
+  task_date?: Date | null;
   [key: string]: unknown;
 }
 
@@ -58,7 +62,53 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .lean<RawTaskRow[]>();
 
-    const data = tasks.map((t) => ({ ...t, id: String(t._id) }));
+    // Attach the user's TaskInstance to every date-specific rule so the All
+    // Tasks list can show completion state and let the user tick the row off
+    // in-place. Daily/weekly rules are completed from the Today screen, where
+    // the per-day instance is materialised.
+    const dateSpecificTargets = tasks
+      .filter(
+        (t) =>
+          t.schedule_type === "date_specific" &&
+          toUtcMidnight(t.task_date ?? null),
+      )
+      .map((t) => ({
+        task_id: String(t._id),
+        task_date: toUtcMidnight(t.task_date ?? null)!,
+      }));
+
+    const instanceByTaskId = new Map<
+      string,
+      { _id: unknown; [k: string]: unknown }
+    >();
+    if (dateSpecificTargets.length > 0) {
+      const taskIds = dateSpecificTargets.map((t) => t.task_id);
+      const instances = await TaskInstance.find({
+        user_id: session.user.id,
+        task_id: { $in: taskIds },
+      }).lean<{ _id: unknown; task_id: string; task_date: Date; [k: string]: unknown }[]>();
+
+      const expectedDateByTask = new Map(
+        dateSpecificTargets.map((t) => [t.task_id, t.task_date.getTime()]),
+      );
+      for (const inst of instances) {
+        const expected = expectedDateByTask.get(String(inst.task_id));
+        const instDate = toUtcMidnight(inst.task_date);
+        if (expected && instDate && instDate.getTime() === expected) {
+          instanceByTaskId.set(String(inst.task_id), inst);
+        }
+      }
+    }
+
+    const data = tasks.map((t) => {
+      const id = String(t._id);
+      const inst = instanceByTaskId.get(id);
+      return {
+        ...t,
+        id,
+        instance: inst ? { ...inst, id: String(inst._id) } : null,
+      };
+    });
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
