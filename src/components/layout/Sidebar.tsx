@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Sun,
   LayoutGrid,
+  Sparkles,
 } from "lucide-react";
 import { FrogIcon } from "@/components/icons/FrogIcon";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,12 @@ const menuGroups: MenuGroup[] = [
         icon: CalendarDays,
         href: "/tasks/calendar",
         permissionId: "tasks.calendar",
+      },
+      {
+        title: "Planner",
+        icon: Sparkles,
+        href: "/planner",
+        permissionId: "planner",
       },
     ],
   },

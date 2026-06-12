@@ -47,6 +47,16 @@ export const MENU_PERMISSION_TREE: MenuPermissionNode[] = [
     ],
   },
   {
+    id: "planner",
+    label: "Planner",
+    children: [
+      { id: "planner.create", label: "Create planner block" },
+      { id: "planner.update", label: "Update planner block" },
+      { id: "planner.delete", label: "Delete planner block" },
+      { id: "planner.complete", label: "Mark complete / Reopen" },
+    ],
+  },
+  {
     id: "projects",
     label: "Project Management",
     children: [

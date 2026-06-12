@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   LayoutGrid,
+  Sparkles,
 } from "lucide-react";
 
 import { FrogIcon } from "@/components/icons/FrogIcon";
@@ -80,6 +81,12 @@ const PRIMARY_NAV: NavItem[] = [
     href: "/tasks/calendar",
     icon: CalendarDays,
     permissionId: "tasks.calendar",
+  },
+  {
+    title: "Planner",
+    href: "/planner",
+    icon: Sparkles,
+    permissionId: "planner",
   },
 ];
 
