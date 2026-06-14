@@ -19,6 +19,7 @@ import {
   Calendar,
   Repeat,
   CalendarDays,
+  CalendarRange,
   Check,
   Tag as TagIcon,
 } from "lucide-react";
@@ -54,7 +55,12 @@ import type {
 
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 const STATUSES = ["Active", "Inactive"] as const;
-const SCHEDULE_TYPES = ["date_specific", "daily", "weekly"] as const;
+const SCHEDULE_TYPES = [
+  "date_specific",
+  "daily",
+  "weekly",
+  "date_range",
+] as const;
 
 const formSchema = z
   .object({
@@ -111,6 +117,13 @@ const formSchema = z
           message: "Pick at least one weekday",
         });
       }
+      if (data.schedule_type === "date_range" && !data.end_date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["end_date"],
+          message: "End date is required for a date-range task",
+        });
+      }
     }
   });
 
@@ -123,7 +136,12 @@ type TaskFormValues = z.infer<typeof formSchema>;
 // task_date = today, and the date input is hidden. Picking any other
 // mode unfolds the relevant fields.
 
-type ScheduleMode = "today" | "date_specific" | "daily" | "weekly";
+type ScheduleMode =
+  | "today"
+  | "date_specific"
+  | "daily"
+  | "weekly"
+  | "date_range";
 
 const SCHEDULE_MODE_META: Record<
   ScheduleMode,
@@ -153,6 +171,11 @@ const SCHEDULE_MODE_META: Record<
     description: "Specific weekdays",
     icon: CalendarDays,
   },
+  date_range: {
+    label: "Date range",
+    description: "Shows every day from a date to a date — check once",
+    icon: CalendarRange,
+  },
 };
 
 const MODE_ORDER: ScheduleMode[] = [
@@ -160,6 +183,7 @@ const MODE_ORDER: ScheduleMode[] = [
   "date_specific",
   "daily",
   "weekly",
+  "date_range",
 ];
 
 /** Decide which mode tile to highlight when opening an existing task. */
@@ -170,6 +194,7 @@ function deriveMode(task: Task | null): ScheduleMode {
       ? "today"
       : "date_specific";
   }
+  if (task.schedule_type === "date_range") return "date_range";
   return task.schedule_type;
 }
 
@@ -319,7 +344,7 @@ function ScheduleModePicker({
   onChange: (v: ScheduleMode) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-1.5">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
       {MODE_ORDER.map((mode) => {
         const meta = SCHEDULE_MODE_META[mode];
         const ModeIcon = meta.icon;
@@ -538,10 +563,10 @@ export function TaskFormModal({
       setValue("repeat_days", []);
       return;
     }
-    // daily / weekly
+    // daily / weekly / date_range
     setValue("schedule_type", next, { shouldValidate: false });
     setValue("task_date", "");
-    if (next === "daily") setValue("repeat_days", []);
+    if (next === "daily" || next === "date_range") setValue("repeat_days", []);
   };
 
   const helper = React.useMemo(() => {
@@ -673,13 +698,17 @@ export function TaskFormModal({
                 )}
                 <FieldError msg={errors.task_date?.message} />
 
-                {(mode === "daily" || mode === "weekly") && (
+                {(mode === "daily" ||
+                  mode === "weekly" ||
+                  mode === "date_range") && (
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     <div>
                       <Input
                         id="start-date"
                         type="date"
-                        aria-label="Start date"
+                        aria-label={
+                          mode === "date_range" ? "From date" : "Start date"
+                        }
                         {...register("start_date")}
                         className={cn(
                           errors.start_date &&
@@ -692,7 +721,11 @@ export function TaskFormModal({
                       <Input
                         id="end-date"
                         type="date"
-                        aria-label="End date (optional)"
+                        aria-label={
+                          mode === "date_range"
+                            ? "To date"
+                            : "End date (optional)"
+                        }
                         {...register("end_date")}
                         className={cn(
                           errors.end_date &&

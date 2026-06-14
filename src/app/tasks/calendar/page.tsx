@@ -55,6 +55,7 @@ const SCHEDULE_LABEL: Record<TaskScheduleType, string> = {
   date_specific: "One-off",
   daily: "Daily",
   weekly: "Weekly",
+  date_range: "Date range",
 };
 
 interface MonthCell {

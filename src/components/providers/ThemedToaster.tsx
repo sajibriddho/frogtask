@@ -11,7 +11,7 @@ export function ThemedToaster() {
   const { theme } = useTheme();
   return (
     <Toaster
-      position="top-center"
+      position="bottom-right"
       richColors
       closeButton
       duration={3500}

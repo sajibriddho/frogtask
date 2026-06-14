@@ -17,6 +17,7 @@ const SCHEDULE_TYPES: TaskScheduleType[] = [
   "date_specific",
   "daily",
   "weekly",
+  "date_range",
 ];
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "urgent"];
 const STATUSES: TaskStatus[] = ["Active", "Inactive"];
@@ -87,6 +88,10 @@ export function validateTaskPayload(raw: unknown): ValidationResult {
     end_date = toUtcMidnight(b.end_date as string | null | undefined);
     if (end_date && end_date.getTime() < start_date.getTime()) {
       return { ok: false, error: "End date must be on or after start date" };
+    }
+
+    if (schedule_type === "date_range" && !end_date) {
+      return { ok: false, error: "End date is required for a date-range task" };
     }
 
     if (schedule_type === "weekly") {

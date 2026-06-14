@@ -21,12 +21,13 @@ import { requirePermission } from "@/lib/require-permission";
 import Task from "@/model/Task";
 import TaskInstance from "@/model/TaskInstance";
 import { validateTaskPayload } from "@/lib/task-payload";
-import { toUtcMidnight } from "@/lib/task-schedule";
+import { singleInstanceDate, toUtcMidnight } from "@/lib/task-schedule";
 
 interface RawTaskRow {
   _id: unknown;
-  schedule_type?: "date_specific" | "daily" | "weekly";
+  schedule_type?: "date_specific" | "daily" | "weekly" | "date_range";
   task_date?: Date | null;
+  start_date?: Date | null;
   [key: string]: unknown;
 }
 
@@ -62,34 +63,46 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .lean<RawTaskRow[]>();
 
-    // Attach the user's TaskInstance to every date-specific rule so the All
-    // Tasks list can show completion state and let the user tick the row off
-    // in-place. Daily/weekly rules are completed from the Today screen, where
-    // the per-day instance is materialised.
-    const dateSpecificTargets = tasks
+    // Attach the user's TaskInstance to every single-instance rule
+    // (date_specific and date_range) so the All Tasks list can show
+    // completion state and let the user tick the row off in-place.
+    // Daily/weekly rules are completed from the Today screen, where the
+    // per-day instance is materialised.
+    const singleInstanceTargets = tasks
       .filter(
         (t) =>
-          t.schedule_type === "date_specific" &&
-          toUtcMidnight(t.task_date ?? null),
+          (t.schedule_type === "date_specific" &&
+            !!toUtcMidnight(t.task_date ?? null)) ||
+          (t.schedule_type === "date_range" &&
+            !!singleInstanceDate({
+              schedule_type: "date_range",
+              start_date: t.start_date ?? null,
+            })),
       )
-      .map((t) => ({
-        task_id: String(t._id),
-        task_date: toUtcMidnight(t.task_date ?? null)!,
-      }));
+      .map((t) => {
+        const canonical =
+          t.schedule_type === "date_range"
+            ? singleInstanceDate({
+                schedule_type: "date_range",
+                start_date: t.start_date ?? null,
+              })!
+            : toUtcMidnight(t.task_date ?? null)!;
+        return { task_id: String(t._id), task_date: canonical };
+      });
 
     const instanceByTaskId = new Map<
       string,
       { _id: unknown; [k: string]: unknown }
     >();
-    if (dateSpecificTargets.length > 0) {
-      const taskIds = dateSpecificTargets.map((t) => t.task_id);
+    if (singleInstanceTargets.length > 0) {
+      const taskIds = singleInstanceTargets.map((t) => t.task_id);
       const instances = await TaskInstance.find({
         user_id: session.user.id,
         task_id: { $in: taskIds },
       }).lean<{ _id: unknown; task_id: string; task_date: Date; [k: string]: unknown }[]>();
 
       const expectedDateByTask = new Map(
-        dateSpecificTargets.map((t) => [t.task_id, t.task_date.getTime()]),
+        singleInstanceTargets.map((t) => [t.task_id, t.task_date.getTime()]),
       );
       for (const inst of instances) {
         const expected = expectedDateByTask.get(String(inst.task_id));

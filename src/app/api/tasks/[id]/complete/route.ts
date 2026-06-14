@@ -16,7 +16,7 @@ import { connectDB } from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import Task from "@/model/Task";
 import TaskInstance from "@/model/TaskInstance";
-import { toUtcMidnight } from "@/lib/task-schedule";
+import { singleInstanceDate, toUtcMidnight } from "@/lib/task-schedule";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -45,8 +45,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       deleted_at: null,
     }).lean<{
       _id: unknown;
-      schedule_type: "date_specific" | "daily" | "weekly";
+      schedule_type: "date_specific" | "daily" | "weekly" | "date_range";
       task_date: Date | null;
+      start_date: Date | null;
     } | null>();
 
     if (!task) {
@@ -56,17 +57,31 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (task.schedule_type !== "date_specific") {
+    if (
+      task.schedule_type !== "date_specific" &&
+      task.schedule_type !== "date_range"
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Only date-specific tasks can be completed from this list",
+          error:
+            "Only date-specific and date-range tasks can be completed from this list",
         },
         { status: 400 },
       );
     }
 
-    const taskDate = toUtcMidnight(task.task_date);
+    // Both single-instance rule shapes converge on a canonical task_date:
+    // date_specific → its fixed task_date, date_range → the start of the
+    // window. The unique (task_id, user_id, task_date) index then guarantees
+    // a single instance per (task, user).
+    const taskDate =
+      task.schedule_type === "date_range"
+        ? singleInstanceDate({
+            schedule_type: "date_range",
+            start_date: task.start_date,
+          })
+        : toUtcMidnight(task.task_date);
     if (!taskDate) {
       return NextResponse.json(
         { success: false, error: "Task is missing its scheduled date" },

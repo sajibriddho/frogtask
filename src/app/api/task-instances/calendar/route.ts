@@ -26,7 +26,7 @@ import {
 interface RawTaskRow {
   _id: unknown;
   title: string;
-  schedule_type: "date_specific" | "daily" | "weekly";
+  schedule_type: "date_specific" | "daily" | "weekly" | "date_range";
   task_date: Date | null;
   start_date: Date | null;
   end_date: Date | null;
@@ -90,6 +90,12 @@ export async function GET(req: NextRequest) {
           start_date: { $lte: to },
           $or: [{ end_date: null }, { end_date: { $gte: from } }],
         },
+        // Date-range: window intersects [from, to] — both bounds required.
+        {
+          schedule_type: "date_range",
+          start_date: { $lte: to },
+          end_date: { $gte: from },
+        },
       ],
     }).lean<RawTaskRow[]>();
 
@@ -110,6 +116,26 @@ export async function GET(req: NextRequest) {
         `${String(inst.task_id)}|${toIsoDate(inst.task_date)}`,
         inst.status,
       );
+    }
+
+    // date_range rules are single-instance: one TaskInstance covers every
+    // day in the window. Build a task_id → status overlay (regardless of
+    // the day being walked) so the calendar paints the whole range with
+    // its completion state.
+    const rangeRuleIds = rules
+      .filter((r) => r.schedule_type === "date_range")
+      .map((r) => String(r._id));
+    const rangeStatusByTask = new Map<string, TaskInstanceStatus>();
+    if (rangeRuleIds.length > 0) {
+      const rangeInstances = await TaskInstance.find({
+        user_id: session.user.id,
+        task_id: { $in: rangeRuleIds },
+      })
+        .select("task_id status")
+        .lean<{ task_id: string; status: TaskInstanceStatus }[]>();
+      for (const inst of rangeInstances) {
+        rangeStatusByTask.set(String(inst.task_id), inst.status);
+      }
     }
 
     // Walk the range, ask each rule "do you fire today?".
@@ -133,7 +159,10 @@ export async function GET(req: NextRequest) {
           title: rule.title,
           priority: rule.priority,
           schedule_type: rule.schedule_type,
-          status: statusByKey.get(`${String(rule._id)}|${dayIso}`) ?? null,
+          status:
+            rule.schedule_type === "date_range"
+              ? rangeStatusByTask.get(String(rule._id)) ?? null
+              : statusByKey.get(`${String(rule._id)}|${dayIso}`) ?? null,
         }));
       buckets.push({ date: dayIso, tasks });
     }

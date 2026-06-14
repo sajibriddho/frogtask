@@ -55,6 +55,7 @@ const SCHEDULE_LABEL: Record<TodayTask["schedule_type"], string> = {
   date_specific: "One-off",
   daily: "Daily",
   weekly: "Weekly",
+  date_range: "Date range",
 };
 
 function isoDay(d: Date): string {

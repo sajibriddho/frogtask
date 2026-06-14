@@ -116,7 +116,23 @@ export function taskOccursOn(rule: ScheduleRule, day: Date): boolean {
     return Array.isArray(rule.repeat_days) && rule.repeat_days.includes(wd);
   }
 
+  // date_range: fires every day inside [start_date, end_date]. The earlier
+  // start/end gates already handled the window; just confirm the bracket
+  // shape (end is required for a range rule).
+  if (rule.schedule_type === "date_range") return !!end;
+
   return false;
+}
+
+/**
+ * For a rule that's modelled as "one instance covers the whole window"
+ * (currently just date_range), return the canonical task_date used for
+ * that single TaskInstance. Returns null when the rule isn't single-
+ * instance or when the dates are missing.
+ */
+export function singleInstanceDate(rule: ScheduleRule): Date | null {
+  if (rule.schedule_type !== "date_range") return null;
+  return toUtcMidnight(rule.start_date ?? null);
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -194,6 +210,13 @@ export function formatScheduleSummary(
       return end ? `${base} until ${end}` : base;
     }
 
+    case "date_range": {
+      const start = formatTaskDate(rule.start_date);
+      const end = formatTaskDate(rule.end_date);
+      if (!start || !end) return "Date range";
+      return `From ${start} to ${end}`;
+    }
+
     default:
       return "";
   }
@@ -224,6 +247,12 @@ export function helperFor(
       if (!rule.start_date) return "Pick a start date and the weekdays.";
       const summary = formatScheduleSummary(rule);
       return `This task will appear ${summary.replace(/^Every /, "every ")}.`;
+    }
+
+    case "date_range": {
+      if (!rule.start_date || !rule.end_date)
+        return "Pick a from-date and a to-date — task appears every day until you check it off.";
+      return `This task will appear every day from ${formatTaskDate(rule.start_date)} to ${formatTaskDate(rule.end_date)}. Checking it off marks it done for the whole range.`;
     }
 
     default:

@@ -16,6 +16,7 @@ import Task from "@/model/Task";
 import TaskInstance from "@/model/TaskInstance";
 import {
   eachDay,
+  singleInstanceDate,
   taskOccursOn,
   todayUtc,
   toUtcMidnight,
@@ -29,7 +30,7 @@ const BACKFILL_DAYS = 30;
 interface RawTaskRow {
   _id: unknown;
   title: string;
-  schedule_type: "date_specific" | "daily" | "weekly";
+  schedule_type: "date_specific" | "daily" | "weekly" | "date_range";
   task_date: Date | null;
   start_date: Date | null;
   end_date: Date | null;
@@ -75,8 +76,11 @@ export async function GET() {
     for (const rule of activeRules) {
       // Daily tasks are intentionally excluded from the Unfinished tab —
       // missing one occurrence of an everyday task isn't actionable; only
-      // today's instance matters.
+      // today's instance matters. Date-range tasks are single-instance:
+      // they live on the today view until the user checks them off, so no
+      // per-day backfill is needed.
       if (rule.schedule_type === "daily") continue;
+      if (rule.schedule_type === "date_range") continue;
       const ruleStart = toUtcMidnight(rule.start_date ?? null);
       const ruleEnd = toUtcMidnight(rule.end_date ?? null);
       // Daily/weekly without a start_date don't really happen, but if so the
@@ -138,13 +142,26 @@ export async function GET() {
       }
     }
 
-    // Step 3: find existing instances in one query, then bulk-create any missing.
-    const matchedIds = matched.map((r) => String(r._id));
-    const instanceByTask = new Map<string, { _id: unknown; task_id: string; [k: string]: unknown }>();
+    // Step 3: find existing instances in one query, then bulk-create any
+    // missing. Two shapes co-exist:
+    //   - per-day rules (date_specific, daily, weekly): one instance per day,
+    //     keyed by task_date == today.
+    //   - single-instance rules (date_range): one instance covers the whole
+    //     window, keyed by task_date == rule.start_date. Checking it off
+    //     marks the task done for every day of the range.
+    const instanceByTask = new Map<
+      string,
+      { _id: unknown; task_id: string; [k: string]: unknown }
+    >();
 
-    if (matchedIds.length > 0) {
+    // — per-day —
+    const perDayMatched = matched.filter(
+      (r) => r.schedule_type !== "date_range",
+    );
+    const perDayIds = perDayMatched.map((r) => String(r._id));
+    if (perDayIds.length > 0) {
       const existing = await TaskInstance.find({
-        task_id: { $in: matchedIds },
+        task_id: { $in: perDayIds },
         user_id: userId,
         task_date: today,
       }).lean();
@@ -153,7 +170,7 @@ export async function GET() {
         existing.map((i) => [String(i.task_id), i]),
       );
 
-      const toCreate = matched
+      const toCreate = perDayMatched
         .filter((rule) => !haveByTask.has(String(rule._id)))
         .map((rule) => ({
           task_id: String(rule._id),
@@ -180,12 +197,59 @@ export async function GET() {
       }
 
       const allInstances = await TaskInstance.find({
-        task_id: { $in: matchedIds },
+        task_id: { $in: perDayIds },
         user_id: userId,
         task_date: today,
       }).lean<{ _id: unknown; task_id: string; [k: string]: unknown }[]>();
 
       for (const i of allInstances) instanceByTask.set(String(i.task_id), i);
+    }
+
+    // — single-instance (date_range) —
+    const rangeMatched = matched.filter(
+      (r) => r.schedule_type === "date_range",
+    );
+    if (rangeMatched.length > 0) {
+      const rangeIds = rangeMatched.map((r) => String(r._id));
+      const existingRange = await TaskInstance.find({
+        task_id: { $in: rangeIds },
+        user_id: userId,
+      }).lean<{ _id: unknown; task_id: string; [k: string]: unknown }[]>();
+
+      const haveByTask = new Map(
+        existingRange.map((i) => [String(i.task_id), i]),
+      );
+
+      const toCreate: Array<Record<string, unknown>> = [];
+      for (const rule of rangeMatched) {
+        if (haveByTask.has(String(rule._id))) continue;
+        const canonical = singleInstanceDate(rule);
+        if (!canonical) continue;
+        toCreate.push({
+          task_id: String(rule._id),
+          user_id: userId,
+          task_date: canonical,
+          status: "pending" as const,
+          completed_at: null,
+          completed_by: null,
+          remarks: "",
+        });
+      }
+
+      if (toCreate.length > 0) {
+        try {
+          await TaskInstance.insertMany(toCreate, { ordered: false });
+        } catch (insertErr) {
+          const code = (insertErr as { code?: number })?.code;
+          if (code !== 11000) throw insertErr;
+        }
+      }
+
+      const allRange = await TaskInstance.find({
+        task_id: { $in: rangeIds },
+        user_id: userId,
+      }).lean<{ _id: unknown; task_id: string; [k: string]: unknown }[]>();
+      for (const i of allRange) instanceByTask.set(String(i.task_id), i);
     }
 
     const todayData = matched.map((rule) => {
@@ -226,10 +290,15 @@ export async function GET() {
       overdueData = pastInstances
         .filter((inst) => {
           const rule = pastTaskById.get(String(inst.task_id));
-          // Drop instances whose parent rule is missing/deleted or whose
-          // schedule is daily — daily tasks reset every day, so a missed
-          // occurrence doesn't belong on the Unfinished tab.
-          return !!rule && rule.schedule_type !== "daily";
+          if (!rule) return false;
+          // Daily tasks reset every day, so a missed occurrence isn't
+          // actionable as overdue. Date-range tasks are single-instance:
+          // their canonical task_date is the start of the window, so the
+          // "past instance" check trips even while they're still in range —
+          // those are already surfaced above via instanceByTask.
+          if (rule.schedule_type === "daily") return false;
+          if (rule.schedule_type === "date_range") return false;
+          return true;
         })
         .map((inst) => {
           const rule = pastTaskById.get(String(inst.task_id))!;

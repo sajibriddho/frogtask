@@ -7,7 +7,11 @@
  *   - task_instances stores per-day completion records (the "did it happen")
  */
 
-export type TaskScheduleType = "date_specific" | "daily" | "weekly";
+export type TaskScheduleType =
+  | "date_specific"
+  | "daily"
+  | "weekly"
+  | "date_range";
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 

@@ -22,6 +22,7 @@ import {
   Tag as TagIcon,
   AlertTriangle,
   CalendarClock,
+  Loader2,
 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -71,6 +72,7 @@ const SCHEDULE_LABEL: Record<TaskScheduleType, string> = {
   date_specific: "One-off",
   daily: "Daily",
   weekly: "Weekly",
+  date_range: "Date range",
 };
 
 type FilterChip = "all" | "pending" | "completed" | "unfinished";
@@ -88,14 +90,15 @@ export default function TodayTasksPage() {
   const [items, setItems] = React.useState<TodayTask[]>([]);
   const [tags, setTags] = React.useState<TaskTag[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [pendingIds, setPendingIds] = React.useState<Set<string>>(new Set());
   const [filter, setFilter] = React.useState<FilterChip>("all");
 
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [manageTagsOpen, setManageTagsOpen] = React.useState(false);
 
-  const fetchToday = React.useCallback(async () => {
-    setLoading(true);
+  const fetchToday = React.useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const res = await fetch("/api/task-instances/today");
       const data = await parseJsonSafe<{
@@ -112,7 +115,7 @@ export default function TodayTasksPage() {
       console.error("fetchToday", err);
       toast.error("Failed to load today's tasks");
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
@@ -254,21 +257,44 @@ export default function TodayTasksPage() {
     }
   };
 
+  const markPending = (id: string, on: boolean) => {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
   const handleReopen = async (item: TodayTask) => {
     if (!item.instance) return;
-    const ok = await updateInstance(item.instance.id, { status: "pending" });
-    if (ok) {
-      toast.success("Task reopened");
-      fetchToday();
+    const instanceId = item.instance.id;
+    if (pendingIds.has(instanceId)) return;
+    markPending(instanceId, true);
+    try {
+      const ok = await updateInstance(instanceId, { status: "pending" });
+      if (ok) {
+        toast.success("Task reopened");
+        await fetchToday({ silent: true });
+      }
+    } finally {
+      markPending(instanceId, false);
     }
   };
 
   const handleComplete = async (item: TodayTask) => {
     if (!item.instance) return;
-    const ok = await updateInstance(item.instance.id, { status: "completed" });
-    if (ok) {
-      toast.success(`"${item.title}" completed`);
-      fetchToday();
+    const instanceId = item.instance.id;
+    if (pendingIds.has(instanceId)) return;
+    markPending(instanceId, true);
+    try {
+      const ok = await updateInstance(instanceId, { status: "completed" });
+      if (ok) {
+        toast.success(`"${item.title}" completed`);
+        await fetchToday({ silent: true });
+      }
+    } finally {
+      markPending(instanceId, false);
     }
   };
 
@@ -405,6 +431,9 @@ export default function TodayTasksPage() {
                     item={item}
                     canComplete={canComplete}
                     canEdit={canUpdate}
+                    pending={
+                      item.instance ? pendingIds.has(item.instance.id) : false
+                    }
                     onCheck={() => handleComplete(item)}
                     onReopen={() => handleReopen(item)}
                     onEdit={() => handleEdit(item)}
@@ -424,6 +453,9 @@ export default function TodayTasksPage() {
                     item={item}
                     canComplete={canComplete}
                     canEdit={false}
+                    pending={
+                      item.instance ? pendingIds.has(item.instance.id) : false
+                    }
                     onCheck={() => handleComplete(item)}
                     onReopen={() => handleReopen(item)}
                     onEdit={() => handleEdit(item)}
@@ -549,6 +581,7 @@ function TaskRow({
   item,
   canComplete,
   canEdit,
+  pending,
   onCheck,
   onReopen,
   onEdit,
@@ -556,30 +589,46 @@ function TaskRow({
   item: TodayTask;
   canComplete: boolean;
   canEdit: boolean;
+  pending: boolean;
   onCheck: () => void;
   onReopen: () => void;
   onEdit: () => void;
 }) {
   const completed = item.instance?.status === "completed";
+  const isRange = item.schedule_type === "date_range";
 
   return (
     <div
       className={cn(
-        "group flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3 sm:px-5 sm:py-4 transition-colors",
+        "group flex items-start gap-3 rounded-2xl border bg-card px-4 py-3 sm:px-5 sm:py-4 transition-colors",
+        isRange
+          ? "border-l-4 border-l-violet-500 border-y-border border-r-border bg-violet-50/40 dark:bg-violet-500/5"
+          : "border-border",
         completed && "bg-muted/30 border-dashed",
+        pending && "opacity-75",
       )}
     >
       <div className="pt-0.5">
-        <Checkbox
-          checked={completed}
-          disabled={!canComplete}
-          onCheckedChange={(next) => {
-            if (!canComplete) return;
-            if (next) onCheck();
-            else onReopen();
-          }}
-          aria-label={completed ? "Reopen task" : "Mark task complete"}
-        />
+        {pending ? (
+          <span
+            className="flex h-4 w-4 items-center justify-center"
+            aria-label="Saving"
+            role="status"
+          >
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          </span>
+        ) : (
+          <Checkbox
+            checked={completed}
+            disabled={!canComplete}
+            onCheckedChange={(next) => {
+              if (!canComplete) return;
+              if (next) onCheck();
+              else onReopen();
+            }}
+            aria-label={completed ? "Reopen task" : "Mark task complete"}
+          />
+        )}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -600,6 +649,15 @@ function TaskRow({
           >
             {PRIORITY_BADGE[item.priority].label}
           </span>
+          {isRange && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+              title="Date-range task — appears every day in the window until you check it off"
+            >
+              <CalendarRange className="h-3 w-3" />
+              Range
+            </span>
+          )}
         </div>
 
         {item.description && !completed && (
@@ -635,10 +693,15 @@ function TaskRow({
           <button
             type="button"
             onClick={onReopen}
-            className="self-start text-[11px] font-medium text-muted-foreground hover:text-primary inline-flex items-center gap-1 px-2 py-1 rounded-md"
+            disabled={pending}
+            className="self-start text-[11px] font-medium text-muted-foreground hover:text-primary inline-flex items-center gap-1 px-2 py-1 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
             title="Reopen task"
           >
-            <RotateCcw className="h-3 w-3" />
+            {pending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3 w-3" />
+            )}
             Reopen
           </button>
         )}

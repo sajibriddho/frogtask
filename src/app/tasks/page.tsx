@@ -26,6 +26,7 @@ import {
   Calendar,
   Repeat,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   Circle,
   RotateCcw,
@@ -87,12 +88,14 @@ const SCHEDULE_TYPE_LABEL: Record<TaskScheduleType, string> = {
   date_specific: "Date specific",
   daily: "Daily",
   weekly: "Weekly",
+  date_range: "Date range",
 };
 
 const SCHEDULE_TYPE_ICON: Record<TaskScheduleType, React.ElementType> = {
   date_specific: Calendar,
   daily: Repeat,
   weekly: CalendarDays,
+  date_range: CalendarRange,
 };
 
 const PRIORITY_BADGE: Record<
@@ -459,6 +462,7 @@ export default function AllTasksPage() {
                 { value: "date_specific", label: "Date specific" },
                 { value: "daily", label: "Daily" },
                 { value: "weekly", label: "Weekly" },
+                { value: "date_range", label: "Date range" },
               ]}
               value={filterSchedule || ""}
               onChange={(v) => setFilterSchedule(v ?? "")}
@@ -571,9 +575,15 @@ export default function AllTasksPage() {
                     const meta = task.tag_id
                       ? tagsById.get(task.tag_id)
                       : undefined;
-                    const isDateSpecific = task.schedule_type === "date_specific";
+                    // Single-instance schedules (one TaskInstance covers the
+                    // whole rule) can be ticked off straight from the list —
+                    // daily / weekly still need the Today screen.
+                    const isSingleInstance =
+                      task.schedule_type === "date_specific" ||
+                      task.schedule_type === "date_range";
                     const completed =
-                      isDateSpecific && task.instance?.status === "completed";
+                      isSingleInstance &&
+                      task.instance?.status === "completed";
                     const completing = completingId === task.id;
                     return (
                       <React.Fragment key={task.id}>
@@ -591,7 +601,7 @@ export default function AllTasksPage() {
                           </TableCell>
                           <TableCell className="py-4 px-4 w-[70%] align-top">
                             <div className="flex items-start gap-3 min-w-0">
-                              {isDateSpecific && (
+                              {isSingleInstance && (
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -679,7 +689,7 @@ export default function AllTasksPage() {
                                     <Eye className="mr-2 h-4 w-4" />
                                     View
                                   </DropdownMenuItem>
-                                  {isDateSpecific && canComplete && (
+                                  {isSingleInstance && canComplete && (
                                     <DropdownMenuItem
                                       onClick={() =>
                                         setCompletion(task, !completed)
