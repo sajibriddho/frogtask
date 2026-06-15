@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Tag as TagIcon,
   MoreHorizontal,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 
 import {
@@ -81,6 +82,7 @@ import type { TaskTag } from "@/types/task-tag";
 
 import { TaskFormModal } from "./_components/TaskFormModal";
 import { ManageTagsModal } from "./_components/ManageTagsModal";
+import { CompletionBurst } from "@/components/common/CompletionBurst";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -89,6 +91,7 @@ const SCHEDULE_TYPE_LABEL: Record<TaskScheduleType, string> = {
   daily: "Daily",
   weekly: "Weekly",
   date_range: "Date range",
+  anytime: "Anytime",
 };
 
 const SCHEDULE_TYPE_ICON: Record<TaskScheduleType, React.ElementType> = {
@@ -96,6 +99,7 @@ const SCHEDULE_TYPE_ICON: Record<TaskScheduleType, React.ElementType> = {
   daily: Repeat,
   weekly: CalendarDays,
   date_range: CalendarRange,
+  anytime: InfinityIcon,
 };
 
 const PRIORITY_BADGE: Record<
@@ -157,6 +161,9 @@ export default function AllTasksPage() {
   const [togglingId, setTogglingId] = React.useState<string | null>(null);
   const [completingId, setCompletingId] = React.useState<string | null>(null);
   const [deactivateTask, setDeactivateTask] = React.useState<Task | null>(null);
+  const [celebrating, setCelebrating] =
+    React.useState<{ id: number; title: string } | null>(null);
+  const celebrationSeq = React.useRef(0);
 
   // ─── Data fetch ─────────────────────────────────────────────────────
   const fetchTasks = React.useCallback(async () => {
@@ -375,9 +382,13 @@ export default function AllTasksPage() {
         res,
       );
       if (data.success) {
-        toast.success(
-          completed ? `"${task.title}" completed` : "Task reopened",
-        );
+        if (completed) {
+          celebrationSeq.current += 1;
+          setCelebrating({ id: celebrationSeq.current, title: task.title });
+          toast.success(`"${task.title}" completed`, { icon: "🐸" });
+        } else {
+          toast.success("Task reopened");
+        }
         fetchTasks();
       } else {
         toast.error(data.error || "Failed to update completion");
@@ -463,6 +474,7 @@ export default function AllTasksPage() {
                 { value: "daily", label: "Daily" },
                 { value: "weekly", label: "Weekly" },
                 { value: "date_range", label: "Date range" },
+                { value: "anytime", label: "Anytime" },
               ]}
               value={filterSchedule || ""}
               onChange={(v) => setFilterSchedule(v ?? "")}
@@ -580,7 +592,8 @@ export default function AllTasksPage() {
                     // daily / weekly still need the Today screen.
                     const isSingleInstance =
                       task.schedule_type === "date_specific" ||
-                      task.schedule_type === "date_range";
+                      task.schedule_type === "date_range" ||
+                      task.schedule_type === "anytime";
                     const completed =
                       isSingleInstance &&
                       task.instance?.status === "completed";
@@ -809,6 +822,14 @@ export default function AllTasksPage() {
         loading={deleting}
         onAction={confirmDelete}
       />
+
+      {celebrating && (
+        <CompletionBurst
+          key={celebrating.id}
+          title={celebrating.title}
+          onDone={() => setCelebrating(null)}
+        />
+      )}
 
       <AlertDialog
         open={!!deactivateTask}

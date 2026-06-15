@@ -45,7 +45,12 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       deleted_at: null,
     }).lean<{
       _id: unknown;
-      schedule_type: "date_specific" | "daily" | "weekly" | "date_range";
+      schedule_type:
+        | "date_specific"
+        | "daily"
+        | "weekly"
+        | "date_range"
+        | "anytime";
       task_date: Date | null;
       start_date: Date | null;
     } | null>();
@@ -59,26 +64,27 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
     if (
       task.schedule_type !== "date_specific" &&
-      task.schedule_type !== "date_range"
+      task.schedule_type !== "date_range" &&
+      task.schedule_type !== "anytime"
     ) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Only date-specific and date-range tasks can be completed from this list",
+            "Only date-specific, date-range and anytime tasks can be completed from this list",
         },
         { status: 400 },
       );
     }
 
-    // Both single-instance rule shapes converge on a canonical task_date:
-    // date_specific → its fixed task_date, date_range → the start of the
-    // window. The unique (task_id, user_id, task_date) index then guarantees
-    // a single instance per (task, user).
+    // All single-instance rule shapes converge on a canonical task_date:
+    // date_specific → its fixed task_date; date_range / anytime → the
+    // start_date. The unique (task_id, user_id, task_date) index then
+    // guarantees a single instance per (task, user).
     const taskDate =
-      task.schedule_type === "date_range"
+      task.schedule_type === "date_range" || task.schedule_type === "anytime"
         ? singleInstanceDate({
-            schedule_type: "date_range",
+            schedule_type: task.schedule_type,
             start_date: task.start_date,
           })
         : toUtcMidnight(task.task_date);

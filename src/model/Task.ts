@@ -53,7 +53,7 @@ const taskSchema = new Schema<ITask>(
     description: { type: String, default: "", maxlength: 2000 },
     schedule_type: {
       type: String,
-      enum: ["date_specific", "daily", "weekly", "date_range"],
+      enum: ["date_specific", "daily", "weekly", "date_range", "anytime"],
       required: true,
     },
     task_date: { type: Date, default: null },

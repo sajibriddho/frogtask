@@ -11,7 +11,8 @@ export type TaskScheduleType =
   | "date_specific"
   | "daily"
   | "weekly"
-  | "date_range";
+  | "date_range"
+  | "anytime";
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
@@ -86,6 +87,8 @@ export interface TodayTask extends Task {
   is_overdue?: boolean;
   /** Original task_date for overdue instances (ISO date). */
   overdue_date?: string;
+  /** True when the rule is the no-deadline "anytime" type. */
+  is_anytime?: boolean;
 }
 
 /**

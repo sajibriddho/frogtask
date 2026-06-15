@@ -37,6 +37,7 @@ import { parseJsonSafe } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TaskFormModal } from "@/app/tasks/_components/TaskFormModal";
 import { ManageTagsModal } from "@/app/tasks/_components/ManageTagsModal";
+import { CompletionBurst } from "@/components/common/CompletionBurst";
 import type {
   TaskPriority,
   CalendarBucket,
@@ -56,6 +57,7 @@ const SCHEDULE_LABEL: Record<TodayTask["schedule_type"], string> = {
   daily: "Daily",
   weekly: "Weekly",
   date_range: "Date range",
+  anytime: "Anytime",
 };
 
 function isoDay(d: Date): string {
@@ -87,6 +89,9 @@ export default function DashboardPage() {
   const [manageTagsOpen, setManageTagsOpen] = React.useState(false);
   const [tags, setTags] = React.useState<TaskTag[]>([]);
   const [verified, setVerified] = React.useState<boolean | null>(null);
+  const [celebrating, setCelebrating] =
+    React.useState<{ id: number; title: string } | null>(null);
+  const celebrationSeq = React.useRef(0);
 
   const fetchTags = React.useCallback(async () => {
     if (!canCreateTask) return;
@@ -243,9 +248,13 @@ export default function DashboardPage() {
         toast.error(json.error || "Failed to update task");
         return;
       }
-      toast.success(
-        next === "completed" ? "Task completed" : "Task reopened",
-      );
+      if (next === "completed") {
+        celebrationSeq.current += 1;
+        setCelebrating({ id: celebrationSeq.current, title: item.title });
+        toast.success("Task completed", { icon: "🐸" });
+      } else {
+        toast.success("Task reopened");
+      }
       fetchToday();
     } catch {
       toast.error("Failed to update task");
@@ -509,6 +518,14 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {celebrating && (
+        <CompletionBurst
+          key={celebrating.id}
+          title={celebrating.title}
+          onDone={() => setCelebrating(null)}
+        />
+      )}
 
       {/* Inline task create modal */}
       {canCreateTask && (

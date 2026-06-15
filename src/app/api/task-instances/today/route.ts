@@ -30,7 +30,12 @@ const BACKFILL_DAYS = 30;
 interface RawTaskRow {
   _id: unknown;
   title: string;
-  schedule_type: "date_specific" | "daily" | "weekly" | "date_range";
+  schedule_type:
+    | "date_specific"
+    | "daily"
+    | "weekly"
+    | "date_range"
+    | "anytime";
   task_date: Date | null;
   start_date: Date | null;
   end_date: Date | null;
@@ -81,6 +86,8 @@ export async function GET() {
       // per-day backfill is needed.
       if (rule.schedule_type === "daily") continue;
       if (rule.schedule_type === "date_range") continue;
+      // Anytime tasks have no calendar day — no per-day backfill.
+      if (rule.schedule_type === "anytime") continue;
       const ruleStart = toUtcMidnight(rule.start_date ?? null);
       const ruleEnd = toUtcMidnight(rule.end_date ?? null);
       // Daily/weekly without a start_date don't really happen, but if so the
@@ -263,6 +270,71 @@ export async function GET() {
       };
     });
 
+    // — anytime (no deadline) —
+    // One TaskInstance per (task, user), keyed by the rule's start_date which
+    // we seeded to the creation day in the payload validator. Always surfaced,
+    // never matched against today's calendar day.
+    const anytimeRules = activeRules.filter(
+      (r) => r.schedule_type === "anytime",
+    );
+    const anytimeData: Array<Record<string, unknown>> = [];
+    if (anytimeRules.length > 0) {
+      const anytimeIds = anytimeRules.map((r) => String(r._id));
+      const existingAnytime = await TaskInstance.find({
+        task_id: { $in: anytimeIds },
+        user_id: userId,
+      }).lean<{ _id: unknown; task_id: string; [k: string]: unknown }[]>();
+
+      const haveByTask = new Map(
+        existingAnytime.map((i) => [String(i.task_id), i]),
+      );
+
+      const toCreate: Array<Record<string, unknown>> = [];
+      for (const rule of anytimeRules) {
+        if (haveByTask.has(String(rule._id))) continue;
+        const canonical = singleInstanceDate(rule);
+        if (!canonical) continue;
+        toCreate.push({
+          task_id: String(rule._id),
+          user_id: userId,
+          task_date: canonical,
+          status: "pending" as const,
+          completed_at: null,
+          completed_by: null,
+          remarks: "",
+        });
+      }
+
+      if (toCreate.length > 0) {
+        try {
+          await TaskInstance.insertMany(toCreate, { ordered: false });
+        } catch (insertErr) {
+          const code = (insertErr as { code?: number })?.code;
+          if (code !== 11000) throw insertErr;
+        }
+      }
+
+      const allAnytime = await TaskInstance.find({
+        task_id: { $in: anytimeIds },
+        user_id: userId,
+      }).lean<{ _id: unknown; task_id: string; [k: string]: unknown }[]>();
+      const anytimeInstByTask = new Map<
+        string,
+        { _id: unknown; task_id: string; [k: string]: unknown }
+      >();
+      for (const i of allAnytime) anytimeInstByTask.set(String(i.task_id), i);
+
+      for (const rule of anytimeRules) {
+        const inst = anytimeInstByTask.get(String(rule._id));
+        anytimeData.push({
+          ...rule,
+          id: String(rule._id),
+          instance: inst ? { ...inst, id: String(inst._id) } : null,
+          is_anytime: true,
+        });
+      }
+    }
+
     // Step 4: pull any past instances still unfinished. These keep showing up
     // on the today screen (flagged as overdue) until the user marks them done,
     // skipped, or cancelled.
@@ -298,6 +370,9 @@ export async function GET() {
           // those are already surfaced above via instanceByTask.
           if (rule.schedule_type === "daily") return false;
           if (rule.schedule_type === "date_range") return false;
+          // Anytime tasks have no deadline — they live in the Anytime
+          // section perpetually, never as overdue.
+          if (rule.schedule_type === "anytime") return false;
           return true;
         })
         .map((inst) => {
@@ -316,7 +391,9 @@ export async function GET() {
     }
 
     // Overdue first so users notice them at the top of each tag group.
-    const data = [...overdueData, ...todayData];
+    // Anytime tasks tail the response — the Today UI splits them into a
+    // dedicated section after Unfinished.
+    const data = [...overdueData, ...todayData, ...anytimeData];
 
     return NextResponse.json({ success: true, data });
   } catch (err) {

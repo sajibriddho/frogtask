@@ -25,7 +25,12 @@ import { singleInstanceDate, toUtcMidnight } from "@/lib/task-schedule";
 
 interface RawTaskRow {
   _id: unknown;
-  schedule_type?: "date_specific" | "daily" | "weekly" | "date_range";
+  schedule_type?:
+    | "date_specific"
+    | "daily"
+    | "weekly"
+    | "date_range"
+    | "anytime";
   task_date?: Date | null;
   start_date?: Date | null;
   [key: string]: unknown;
@@ -64,7 +69,7 @@ export async function GET(req: NextRequest) {
       .lean<RawTaskRow[]>();
 
     // Attach the user's TaskInstance to every single-instance rule
-    // (date_specific and date_range) so the All Tasks list can show
+    // (date_specific, date_range, anytime) so the All Tasks list can show
     // completion state and let the user tick the row off in-place.
     // Daily/weekly rules are completed from the Today screen, where the
     // per-day instance is materialised.
@@ -73,17 +78,18 @@ export async function GET(req: NextRequest) {
         (t) =>
           (t.schedule_type === "date_specific" &&
             !!toUtcMidnight(t.task_date ?? null)) ||
-          (t.schedule_type === "date_range" &&
+          ((t.schedule_type === "date_range" ||
+            t.schedule_type === "anytime") &&
             !!singleInstanceDate({
-              schedule_type: "date_range",
+              schedule_type: t.schedule_type,
               start_date: t.start_date ?? null,
             })),
       )
       .map((t) => {
         const canonical =
-          t.schedule_type === "date_range"
+          t.schedule_type === "date_range" || t.schedule_type === "anytime"
             ? singleInstanceDate({
-                schedule_type: "date_range",
+                schedule_type: t.schedule_type,
                 start_date: t.start_date ?? null,
               })!
             : toUtcMidnight(t.task_date ?? null)!;

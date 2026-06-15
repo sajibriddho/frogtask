@@ -98,6 +98,10 @@ export function taskOccursOn(rule: ScheduleRule, day: Date): boolean {
   if (!target) return false;
   const t = target.getTime();
 
+  // Anytime tasks have no schedule — they're surfaced by the Today route
+  // in their own "Anytime" section, never matched against a calendar day.
+  if (rule.schedule_type === "anytime") return false;
+
   if (rule.schedule_type === "date_specific") {
     const taskDay = toUtcMidnight(rule.task_date ?? null);
     return !!taskDay && taskDay.getTime() === t;
@@ -126,12 +130,18 @@ export function taskOccursOn(rule: ScheduleRule, day: Date): boolean {
 
 /**
  * For a rule that's modelled as "one instance covers the whole window"
- * (currently just date_range), return the canonical task_date used for
+ * (date_range and anytime), return the canonical task_date used for
  * that single TaskInstance. Returns null when the rule isn't single-
  * instance or when the dates are missing.
+ *
+ * Anytime tasks have no deadline; the API seeds `start_date` to the
+ * creation day so each (task, user) still has a stable canonical
+ * task_date for the unique TaskInstance index.
  */
 export function singleInstanceDate(rule: ScheduleRule): Date | null {
-  if (rule.schedule_type !== "date_range") return null;
+  if (rule.schedule_type !== "date_range" && rule.schedule_type !== "anytime") {
+    return null;
+  }
   return toUtcMidnight(rule.start_date ?? null);
 }
 
@@ -217,6 +227,9 @@ export function formatScheduleSummary(
       return `From ${start} to ${end}`;
     }
 
+    case "anytime":
+      return "Anytime — no deadline";
+
     default:
       return "";
   }
@@ -254,6 +267,9 @@ export function helperFor(
         return "Pick a from-date and a to-date — task appears every day until you check it off.";
       return `This task will appear every day from ${formatTaskDate(rule.start_date)} to ${formatTaskDate(rule.end_date)}. Checking it off marks it done for the whole range.`;
     }
+
+    case "anytime":
+      return "No deadline — this task stays in your Anytime list on the Today screen until you check it off.";
 
     default:
       return "";

@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   CalendarClock,
   Loader2,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +41,7 @@ import type { TaskTag } from "@/types/task-tag";
 
 import { TaskFormModal } from "@/app/tasks/_components/TaskFormModal";
 import { ManageTagsModal } from "@/app/tasks/_components/ManageTagsModal";
+import { CompletionBurst } from "@/components/common/CompletionBurst";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -73,9 +75,10 @@ const SCHEDULE_LABEL: Record<TaskScheduleType, string> = {
   daily: "Daily",
   weekly: "Weekly",
   date_range: "Date range",
+  anytime: "Anytime",
 };
 
-type FilterChip = "all" | "pending" | "completed" | "unfinished";
+type FilterChip = "all" | "pending" | "completed" | "unfinished" | "anytime";
 
 const UNTAGGED_KEY = "__untagged__";
 const UNTAGGED_LABEL = "Untagged";
@@ -96,6 +99,11 @@ export default function TodayTasksPage() {
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [manageTagsOpen, setManageTagsOpen] = React.useState(false);
+  // One celebration overlay at a time. Keyed by task id so rapid clicks
+  // restart the animation instead of stacking overlays.
+  const [celebrating, setCelebrating] =
+    React.useState<{ id: number; title: string } | null>(null);
+  const celebrationSeq = React.useRef(0);
 
   const fetchToday = React.useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -146,17 +154,20 @@ export default function TodayTasksPage() {
     return m;
   }, [tags]);
 
-  // Split the response: today's instances (today_date) vs. carried-over
-  // unfinished instances from prior days. The Unfinished tab owns the latter
-  // exclusively — they are NOT counted in All/Pending/Completed.
-  const { todayItems, overdueItems } = React.useMemo(() => {
+  // Split the response into three buckets: today's scheduled instances,
+  // carried-over unfinished instances, and no-deadline "anytime" tasks.
+  // Each of those three has its own filter chip — they are NOT counted in
+  // All/Pending/Completed so today's view stays focused on today.
+  const { todayItems, overdueItems, anytimeItems } = React.useMemo(() => {
     const todayItems: TodayTask[] = [];
     const overdueItems: TodayTask[] = [];
+    const anytimeItems: TodayTask[] = [];
     for (const it of items) {
-      if (it.is_overdue) overdueItems.push(it);
+      if (it.is_anytime) anytimeItems.push(it);
+      else if (it.is_overdue) overdueItems.push(it);
       else todayItems.push(it);
     }
-    return { todayItems, overdueItems };
+    return { todayItems, overdueItems, anytimeItems };
   }, [items]);
 
   const counts = React.useMemo(() => {
@@ -171,16 +182,18 @@ export default function TodayTasksPage() {
       pending,
       completed,
       unfinished: overdueItems.length,
+      anytime: anytimeItems.length,
     };
-  }, [todayItems, overdueItems]);
+  }, [todayItems, overdueItems, anytimeItems]);
 
   const filtered = React.useMemo(() => {
     if (filter === "unfinished") return overdueItems;
+    if (filter === "anytime") return anytimeItems;
     if (filter === "all") return todayItems;
     if (filter === "completed")
       return todayItems.filter((t) => t.instance?.status === "completed");
     return todayItems.filter((t) => t.instance?.status !== "completed");
-  }, [todayItems, overdueItems, filter]);
+  }, [todayItems, overdueItems, anytimeItems, filter]);
 
   // Group by tag, ordered A→Z by tag name (untagged last).
   const tagGroups = React.useMemo(() => {
@@ -290,7 +303,12 @@ export default function TodayTasksPage() {
     try {
       const ok = await updateInstance(instanceId, { status: "completed" });
       if (ok) {
-        toast.success(`"${item.title}" completed`);
+        // Joyful celebration — the toast is the silent fallback, the
+        // burst is the moment. Re-key on every fire so rapid clicks
+        // restart the animation instead of stacking overlays.
+        celebrationSeq.current += 1;
+        setCelebrating({ id: celebrationSeq.current, title: item.title });
+        toast.success(`"${item.title}" completed`, { icon: "🐸" });
         await fetchToday({ silent: true });
       }
     } finally {
@@ -373,10 +391,13 @@ export default function TodayTasksPage() {
             { id: "pending", label: "Pending", count: counts.pending, tone: "default" },
             { id: "completed", label: "Completed", count: counts.completed, tone: "default" },
             { id: "unfinished", label: "Unfinished", count: counts.unfinished, tone: "rose" },
+            { id: "anytime", label: "Anytime", count: counts.anytime, tone: "yellow" },
           ] as const
         ).map((chip) => {
           const active = filter === chip.id;
           const isRose = chip.tone === "rose";
+          const isYellow = chip.tone === "yellow";
+          const Icon = isRose ? AlertTriangle : isYellow ? InfinityIcon : null;
           return (
             <button
               key={chip.id}
@@ -387,13 +408,17 @@ export default function TodayTasksPage() {
                 active
                   ? isRose
                     ? "bg-rose-600 text-white shadow-sm"
-                    : "bg-primary text-primary-foreground shadow-sm"
+                    : isYellow
+                      ? "bg-yellow-500 text-white shadow-sm"
+                      : "bg-primary text-primary-foreground shadow-sm"
                   : isRose && chip.count > 0
                     ? "bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-300"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                    : isYellow && chip.count > 0
+                      ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
               )}
             >
-              {isRose && <AlertTriangle className="h-3 w-3" />}
+              {Icon && <Icon className="h-3 w-3" />}
               <span>{chip.label}</span>
               <span
                 className={cn(
@@ -402,7 +427,9 @@ export default function TodayTasksPage() {
                     ? "bg-white/20 text-inherit"
                     : isRose && chip.count > 0
                       ? "bg-rose-50 text-rose-700 dark:bg-rose-500/25 dark:text-rose-200"
-                      : "bg-card text-muted-foreground",
+                      : isYellow && chip.count > 0
+                        ? "bg-yellow-50 text-yellow-800 dark:bg-yellow-500/25 dark:text-yellow-200"
+                        : "bg-card text-muted-foreground",
                 )}
               >
                 {chip.count}
@@ -442,6 +469,28 @@ export default function TodayTasksPage() {
               </div>
             </section>
           ))
+        ) : filter === "anytime" ? (
+          <section className="space-y-2">
+            <AnytimeGroupHeader count={anytimeItems.length} />
+            <div className="space-y-2">
+              {tagGroups.flatMap(({ items: groupItems }) =>
+                groupItems.map((item) => (
+                  <TaskRow
+                    key={item.instance?.id ?? item.id}
+                    item={item}
+                    canComplete={canComplete}
+                    canEdit={canUpdate}
+                    pending={
+                      item.instance ? pendingIds.has(item.instance.id) : false
+                    }
+                    onCheck={() => handleComplete(item)}
+                    onReopen={() => handleReopen(item)}
+                    onEdit={() => handleEdit(item)}
+                  />
+                )),
+              )}
+            </div>
+          </section>
         ) : (
           tagGroups.map(({ key, tag, items: groupItems }) => (
             <section key={key} className="space-y-2">
@@ -484,6 +533,14 @@ export default function TodayTasksPage() {
         onOpenChange={setManageTagsOpen}
         onChanged={onTagsChanged}
       />
+
+      {celebrating && (
+        <CompletionBurst
+          key={celebrating.id}
+          title={celebrating.title}
+          onDone={() => setCelebrating(null)}
+        />
+      )}
     </div>
   );
 }
@@ -550,6 +607,18 @@ function TagGroupHeader({
   );
 }
 
+function AnytimeGroupHeader({ count }: { count: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-1">
+      <InfinityIcon className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-300">
+        Anytime — no deadline
+      </h3>
+      <span className="text-[11px] text-muted-foreground">({count})</span>
+    </div>
+  );
+}
+
 function DateGroupHeader({ date, count }: { date: string; count: number }) {
   const daysOld = React.useMemo(() => {
     if (!date) return 0;
@@ -596,14 +665,17 @@ function TaskRow({
 }) {
   const completed = item.instance?.status === "completed";
   const isRange = item.schedule_type === "date_range";
+  const isAnytime = item.is_anytime || item.schedule_type === "anytime";
 
   return (
     <div
       className={cn(
         "group flex items-start gap-3 rounded-2xl border bg-card px-4 py-3 sm:px-5 sm:py-4 transition-colors",
-        isRange
-          ? "border-l-4 border-l-violet-500 border-y-border border-r-border bg-violet-50/40 dark:bg-violet-500/5"
-          : "border-border",
+        isAnytime
+          ? "border-l-4 border-l-yellow-500 border-y-border border-r-border bg-yellow-50/40 dark:bg-yellow-500/5"
+          : isRange
+            ? "border-l-4 border-l-violet-500 border-y-border border-r-border bg-violet-50/40 dark:bg-violet-500/5"
+            : "border-border",
         completed && "bg-muted/30 border-dashed",
         pending && "opacity-75",
       )}
@@ -656,6 +728,15 @@ function TaskRow({
             >
               <CalendarRange className="h-3 w-3" />
               Range
+            </span>
+          )}
+          {isAnytime && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300"
+              title="Anytime task — no deadline; sits here until you check it off"
+            >
+              <InfinityIcon className="h-3 w-3" />
+              Anytime
             </span>
           )}
         </div>
@@ -735,6 +816,10 @@ function EmptyToday({
   if (filter === "unfinished") {
     title = "No unfinished tasks";
     description = "Nothing has been left behind from earlier days — nice work.";
+  } else if (filter === "anytime") {
+    title = "No anytime tasks";
+    description =
+      "Anytime tasks have no deadline — create one to keep a backlog you can chip away at whenever.";
   } else if (totalToday > 0) {
     if (filter === "completed") {
       title = "No completed tasks yet";

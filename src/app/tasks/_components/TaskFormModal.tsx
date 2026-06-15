@@ -22,6 +22,7 @@ import {
   CalendarRange,
   Check,
   Tag as TagIcon,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 
 import {
@@ -60,6 +61,7 @@ const SCHEDULE_TYPES = [
   "daily",
   "weekly",
   "date_range",
+  "anytime",
 ] as const;
 
 const formSchema = z
@@ -82,6 +84,9 @@ const formSchema = z
     status: z.enum(STATUSES),
   })
   .superRefine((data, ctx) => {
+    // Anytime: no dates at all — server seeds start_date to today.
+    if (data.schedule_type === "anytime") return;
+
     if (data.schedule_type === "date_specific") {
       if (!data.task_date) {
         ctx.addIssue({
@@ -141,7 +146,8 @@ type ScheduleMode =
   | "date_specific"
   | "daily"
   | "weekly"
-  | "date_range";
+  | "date_range"
+  | "anytime";
 
 const SCHEDULE_MODE_META: Record<
   ScheduleMode,
@@ -176,6 +182,11 @@ const SCHEDULE_MODE_META: Record<
     description: "Shows every day from a date to a date — check once",
     icon: CalendarRange,
   },
+  anytime: {
+    label: "Anytime",
+    description: "No deadline — sits in your Anytime list until you check it off",
+    icon: InfinityIcon,
+  },
 };
 
 const MODE_ORDER: ScheduleMode[] = [
@@ -184,6 +195,7 @@ const MODE_ORDER: ScheduleMode[] = [
   "daily",
   "weekly",
   "date_range",
+  "anytime",
 ];
 
 /** Decide which mode tile to highlight when opening an existing task. */
@@ -195,6 +207,7 @@ function deriveMode(task: Task | null): ScheduleMode {
       : "date_specific";
   }
   if (task.schedule_type === "date_range") return "date_range";
+  if (task.schedule_type === "anytime") return "anytime";
   return task.schedule_type;
 }
 
@@ -344,7 +357,7 @@ function ScheduleModePicker({
   onChange: (v: ScheduleMode) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+    <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5">
       {MODE_ORDER.map((mode) => {
         const meta = SCHEDULE_MODE_META[mode];
         const ModeIcon = meta.icon;
@@ -563,6 +576,15 @@ export function TaskFormModal({
       setValue("repeat_days", []);
       return;
     }
+    if (next === "anytime") {
+      // No dates — the server seeds start_date on create.
+      setValue("schedule_type", "anytime", { shouldValidate: false });
+      setValue("task_date", "");
+      setValue("start_date", "");
+      setValue("end_date", "");
+      setValue("repeat_days", []);
+      return;
+    }
     // daily / weekly / date_range
     setValue("schedule_type", next, { shouldValidate: false });
     setValue("task_date", "");
@@ -583,17 +605,18 @@ export function TaskFormModal({
   const onSubmit = async (values: TaskFormValues) => {
     setSubmitting(true);
     try {
+      const isAnytime = values.schedule_type === "anytime";
+      const isDateSpecific = values.schedule_type === "date_specific";
       const payload = {
         title: values.title,
         description: values.description ?? "",
         priority: values.priority,
         schedule_type: values.schedule_type,
-        task_date:
-          values.schedule_type === "date_specific" ? values.task_date : null,
+        task_date: isDateSpecific ? values.task_date : null,
         start_date:
-          values.schedule_type !== "date_specific" ? values.start_date : null,
+          isAnytime || isDateSpecific ? null : values.start_date,
         end_date:
-          values.schedule_type !== "date_specific" && values.end_date
+          !isAnytime && !isDateSpecific && values.end_date
             ? values.end_date
             : null,
         repeat_days: values.schedule_type === "weekly" ? values.repeat_days : [],

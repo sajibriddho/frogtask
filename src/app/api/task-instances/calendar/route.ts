@@ -26,7 +26,12 @@ import {
 interface RawTaskRow {
   _id: unknown;
   title: string;
-  schedule_type: "date_specific" | "daily" | "weekly" | "date_range";
+  schedule_type:
+    | "date_specific"
+    | "daily"
+    | "weekly"
+    | "date_range"
+    | "anytime";
   task_date: Date | null;
   start_date: Date | null;
   end_date: Date | null;

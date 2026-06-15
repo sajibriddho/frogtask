@@ -5,7 +5,7 @@
  * object (or a 400-shaped error).
  */
 
-import { toUtcMidnight } from "@/lib/task-schedule";
+import { todayUtc, toUtcMidnight } from "@/lib/task-schedule";
 import type {
   TaskPriority,
   TaskScheduleType,
@@ -18,6 +18,7 @@ const SCHEDULE_TYPES: TaskScheduleType[] = [
   "daily",
   "weekly",
   "date_range",
+  "anytime",
 ];
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "urgent"];
 const STATUSES: TaskStatus[] = ["Active", "Inactive"];
@@ -80,6 +81,11 @@ export function validateTaskPayload(raw: unknown): ValidationResult {
     task_date = toUtcMidnight(b.task_date as string | null | undefined);
     if (!task_date)
       return { ok: false, error: "Task date is required for a date-specific task" };
+  } else if (schedule_type === "anytime") {
+    // Anytime tasks have no dates from the client; seed start_date to today
+    // so the single TaskInstance has a stable canonical task_date for the
+    // unique (task_id, user_id, task_date) index.
+    start_date = todayUtc();
   } else {
     start_date = toUtcMidnight(b.start_date as string | null | undefined);
     if (!start_date)
