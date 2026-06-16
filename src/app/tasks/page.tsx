@@ -28,7 +28,6 @@ import {
   CalendarDays,
   CalendarRange,
   CheckCircle2,
-  Circle,
   RotateCcw,
   Tag as TagIcon,
   MoreHorizontal,
@@ -85,6 +84,11 @@ import type { TaskTag } from "@/types/task-tag";
 import { TaskFormModal } from "./_components/TaskFormModal";
 import { ManageTagsModal } from "./_components/ManageTagsModal";
 import { CompletionBurst } from "@/components/common/CompletionBurst";
+import { CompletionToggle } from "@/components/common/CompletionToggle";
+import {
+  CompletionLoading,
+  withMinDuration,
+} from "@/components/common/CompletionLoading";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -164,8 +168,15 @@ export default function AllTasksPage() {
   const [completingId, setCompletingId] = React.useState<string | null>(null);
   const [deactivateTask, setDeactivateTask] = React.useState<Task | null>(null);
   const [celebrating, setCelebrating] =
-    React.useState<{ id: number; title: string } | null>(null);
+    React.useState<{
+      id: number;
+      title: string;
+      origin?: { x: number; y: number };
+    } | null>(null);
   const celebrationSeq = React.useRef(0);
+  const [completingTitle, setCompletingTitle] = React.useState<string | null>(
+    null,
+  );
 
   // ─── Data fetch ─────────────────────────────────────────────────────
   const fetchTasks = React.useCallback(async () => {
@@ -391,21 +402,35 @@ export default function AllTasksPage() {
     }
   };
 
-  const setCompletion = async (task: TaskWithInstance, completed: boolean) => {
+  const setCompletion = async (
+    task: TaskWithInstance,
+    completed: boolean,
+    origin?: { x: number; y: number },
+  ) => {
     setCompletingId(task.id);
+    // Full-page joyful loader only on the *complete* direction — reopening
+    // is a quiet correction, no celebration warranted.
+    if (completed) setCompletingTitle(task.title);
     try {
-      const res = await fetch(`/api/tasks/${task.id}/complete`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed }),
-      });
-      const data = await parseJsonSafe<{ success: boolean; error?: string }>(
-        res,
+      const data = await withMinDuration(
+        (async () => {
+          const res = await fetch(`/api/tasks/${task.id}/complete`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ completed }),
+          });
+          return parseJsonSafe<{ success: boolean; error?: string }>(res);
+        })(),
+        completed ? 700 : 0,
       );
       if (data.success) {
         if (completed) {
           celebrationSeq.current += 1;
-          setCelebrating({ id: celebrationSeq.current, title: task.title });
+          setCelebrating({
+            id: celebrationSeq.current,
+            title: task.title,
+            origin,
+          });
           toast.success(`"${task.title}" completed`, { icon: "🐸" });
         } else {
           toast.success("Task reopened");
@@ -419,6 +444,7 @@ export default function AllTasksPage() {
       toast.error("Failed to update completion");
     } finally {
       setCompletingId(null);
+      setCompletingTitle(null);
     }
   };
 
@@ -661,20 +687,8 @@ export default function AllTasksPage() {
                           <TableCell className="py-4 px-4 w-[70%] align-top">
                             <div className="flex items-start gap-3 min-w-0">
                               {isSingleInstance && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCompletion(task, !completed)
-                                  }
-                                  disabled={!canComplete || completing}
-                                  className={cn(
-                                    "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors",
-                                    completed
-                                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
-                                      : "text-muted-foreground hover:text-foreground",
-                                    (!canComplete || completing) &&
-                                      "cursor-not-allowed opacity-60",
-                                  )}
+                                <span
+                                  className="inline-flex h-5 items-center"
                                   title={
                                     !canComplete
                                       ? "You don't have permission to complete tasks"
@@ -682,18 +696,17 @@ export default function AllTasksPage() {
                                         ? "Reopen task"
                                         : "Mark task complete"
                                   }
-                                  aria-label={
-                                    completed
-                                      ? "Reopen task"
-                                      : "Mark task complete"
-                                  }
                                 >
-                                  {completed ? (
-                                    <CheckCircle2 className="h-5 w-5" />
-                                  ) : (
-                                    <Circle className="h-5 w-5" />
-                                  )}
-                                </button>
+                                  <CompletionToggle
+                                    checked={completed}
+                                    pending={completing}
+                                    disabled={!canComplete}
+                                    size="md"
+                                    onChange={(next, origin) =>
+                                      setCompletion(task, next, origin)
+                                    }
+                                  />
+                                </span>
                               )}
                               <div className="min-w-0 flex-1">
                                 <p
@@ -869,10 +882,13 @@ export default function AllTasksPage() {
         onAction={confirmDelete}
       />
 
+      <CompletionLoading open={!!completingTitle} title={completingTitle} />
+
       {celebrating && (
         <CompletionBurst
           key={celebrating.id}
           title={celebrating.title}
+          origin={celebrating.origin}
           onDone={() => setCelebrating(null)}
         />
       )}

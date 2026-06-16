@@ -323,3 +323,240 @@ body[data-scroll-locked][data-scroll-locked] {
 .frog-confetti {
   animation: frog-confetti 900ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
 }
+
+/* Frog runs from click origin → top-right corner along an arc.
+ * Position pairs come in as CSS variables so each instance can target
+ * its own waypoints. The trailing translate(-50%, -50%) keeps the card
+ * centred on its waypoint at every keyframe. */
+@keyframes frog-run {
+  0% {
+    transform: translate(var(--frog-start-x), var(--frog-start-y))
+      translate(-50%, -50%) scale(0.75) rotate(-6deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(var(--frog-mid-x), var(--frog-mid-y))
+      translate(-50%, -50%) scale(1.15) rotate(10deg);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--frog-end-x), var(--frog-end-y))
+      translate(-50%, -50%) scale(0.55) rotate(-12deg);
+    opacity: 0;
+  }
+}
+
+.frog-run {
+  animation: frog-run 1200ms cubic-bezier(0.34, 1.32, 0.5, 1) forwards;
+}
+
+/* ─── CompletionLoading overlay ─────────────────────────────────────────
+ * Full-page joyful loader that plays while a mark-complete API call is
+ * in-flight. Keep keyframes here so the component stays markup-only.
+ * ──────────────────────────────────────────────────────────────────── */
+
+@keyframes completion-loading-fade-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes completion-loading-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-16px) scale(1.04);
+  }
+}
+
+@keyframes completion-loading-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes completion-loading-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes completion-loading-dot {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.55);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes completion-loading-phrase {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.completion-loading-fade {
+  animation: completion-loading-fade-in 220ms ease-out forwards;
+}
+.completion-loading-bounce {
+  animation: completion-loading-bounce 850ms cubic-bezier(0.34, 1.56, 0.64, 1)
+    infinite;
+}
+.completion-loading-ring {
+  animation: completion-loading-ring 1500ms ease-out infinite;
+}
+.completion-loading-ring-delay {
+  animation: completion-loading-ring 1500ms ease-out infinite;
+  animation-delay: 600ms;
+}
+.completion-loading-glow-slow {
+  animation: completion-loading-glow 2000ms ease-in-out infinite;
+}
+.completion-loading-glow-fast {
+  animation: completion-loading-glow 1300ms ease-in-out infinite;
+}
+.completion-loading-dot {
+  animation: completion-loading-dot 1200ms ease-in-out infinite;
+}
+.completion-loading-dot-1 {
+  animation-delay: 0ms;
+}
+.completion-loading-dot-2 {
+  animation-delay: 160ms;
+}
+.completion-loading-dot-3 {
+  animation-delay: 320ms;
+}
+.completion-loading-phrase {
+  animation: completion-loading-phrase 280ms ease-out,
+    completion-loading-shimmer 2400ms linear infinite;
+}
+
+/* ─── Extra "way more amazing" layers ───────────────────────────────── */
+
+@keyframes completion-loading-bubble-rise {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--bubble-op, 0.5);
+  }
+  100% {
+    transform: translateY(-105vh) scale(1.1);
+    opacity: 0;
+  }
+}
+
+@keyframes completion-loading-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes completion-loading-orbit-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes completion-loading-wiggle {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes completion-loading-sparkle {
+  0%,
+  100% {
+    transform: translateY(-50%) scale(0.4);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-50%) scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes completion-loading-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.completion-loading-bubble {
+  animation-name: completion-loading-bubble-rise;
+  animation-timing-function: cubic-bezier(0.32, 0.04, 0.55, 1);
+  animation-iteration-count: infinite;
+}
+
+.completion-loading-orbit {
+  animation: completion-loading-orbit 4500ms linear infinite;
+}
+
+.completion-loading-orbit-slow {
+  animation: completion-loading-orbit-slow 9000ms linear infinite;
+}
+
+.completion-loading-wiggle {
+  transform-origin: center;
+  animation: completion-loading-wiggle 1200ms ease-in-out infinite;
+}
+
+/* ─── CompletionToggle one-shot ring-burst ──────────────────────────── */
+
+@keyframes completion-toggle-burst {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.completion-toggle-burst {
+  animation: completion-toggle-burst 520ms ease-out forwards;
+}

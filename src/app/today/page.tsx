@@ -26,7 +26,6 @@ import {
   Infinity as InfinityIcon,
 } from "lucide-react";
 
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { parseJsonSafe } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -42,6 +41,11 @@ import type { TaskTag } from "@/types/task-tag";
 import { TaskFormModal } from "@/app/tasks/_components/TaskFormModal";
 import { ManageTagsModal } from "@/app/tasks/_components/ManageTagsModal";
 import { CompletionBurst } from "@/components/common/CompletionBurst";
+import { CompletionToggle } from "@/components/common/CompletionToggle";
+import {
+  CompletionLoading,
+  withMinDuration,
+} from "@/components/common/CompletionLoading";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 
@@ -102,8 +106,15 @@ export default function TodayTasksPage() {
   // One celebration overlay at a time. Keyed by task id so rapid clicks
   // restart the animation instead of stacking overlays.
   const [celebrating, setCelebrating] =
-    React.useState<{ id: number; title: string } | null>(null);
+    React.useState<{
+      id: number;
+      title: string;
+      origin?: { x: number; y: number };
+    } | null>(null);
   const celebrationSeq = React.useRef(0);
+  const [completingTitle, setCompletingTitle] = React.useState<string | null>(
+    null,
+  );
 
   const fetchToday = React.useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -295,24 +306,36 @@ export default function TodayTasksPage() {
     }
   };
 
-  const handleComplete = async (item: TodayTask) => {
+  const handleComplete = async (
+    item: TodayTask,
+    origin?: { x: number; y: number },
+  ) => {
     if (!item.instance) return;
     const instanceId = item.instance.id;
     if (pendingIds.has(instanceId)) return;
     markPending(instanceId, true);
+    setCompletingTitle(item.title);
     try {
-      const ok = await updateInstance(instanceId, { status: "completed" });
+      const ok = await withMinDuration(
+        updateInstance(instanceId, { status: "completed" }),
+        700,
+      );
       if (ok) {
         // Joyful celebration — the toast is the silent fallback, the
         // burst is the moment. Re-key on every fire so rapid clicks
         // restart the animation instead of stacking overlays.
         celebrationSeq.current += 1;
-        setCelebrating({ id: celebrationSeq.current, title: item.title });
+        setCelebrating({
+          id: celebrationSeq.current,
+          title: item.title,
+          origin,
+        });
         toast.success(`"${item.title}" completed`, { icon: "🐸" });
         await fetchToday({ silent: true });
       }
     } finally {
       markPending(instanceId, false);
+      setCompletingTitle(null);
     }
   };
 
@@ -461,7 +484,7 @@ export default function TodayTasksPage() {
                     pending={
                       item.instance ? pendingIds.has(item.instance.id) : false
                     }
-                    onCheck={() => handleComplete(item)}
+                    onCheck={(origin) => handleComplete(item, origin)}
                     onReopen={() => handleReopen(item)}
                     onEdit={() => handleEdit(item)}
                   />
@@ -483,7 +506,7 @@ export default function TodayTasksPage() {
                     pending={
                       item.instance ? pendingIds.has(item.instance.id) : false
                     }
-                    onCheck={() => handleComplete(item)}
+                    onCheck={(origin) => handleComplete(item, origin)}
                     onReopen={() => handleReopen(item)}
                     onEdit={() => handleEdit(item)}
                   />
@@ -505,7 +528,7 @@ export default function TodayTasksPage() {
                     pending={
                       item.instance ? pendingIds.has(item.instance.id) : false
                     }
-                    onCheck={() => handleComplete(item)}
+                    onCheck={(origin) => handleComplete(item, origin)}
                     onReopen={() => handleReopen(item)}
                     onEdit={() => handleEdit(item)}
                   />
@@ -534,10 +557,13 @@ export default function TodayTasksPage() {
         onChanged={onTagsChanged}
       />
 
+      <CompletionLoading open={!!completingTitle} title={completingTitle} />
+
       {celebrating && (
         <CompletionBurst
           key={celebrating.id}
           title={celebrating.title}
+          origin={celebrating.origin}
           onDone={() => setCelebrating(null)}
         />
       )}
@@ -659,7 +685,7 @@ function TaskRow({
   canComplete: boolean;
   canEdit: boolean;
   pending: boolean;
-  onCheck: () => void;
+  onCheck: (origin?: { x: number; y: number }) => void;
   onReopen: () => void;
   onEdit: () => void;
 }) {
@@ -680,27 +706,17 @@ function TaskRow({
         pending && "opacity-75",
       )}
     >
-      <div className="pt-0.5">
-        {pending ? (
-          <span
-            className="flex h-4 w-4 items-center justify-center"
-            aria-label="Saving"
-            role="status"
-          >
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          </span>
-        ) : (
-          <Checkbox
-            checked={completed}
-            disabled={!canComplete}
-            onCheckedChange={(next) => {
-              if (!canComplete) return;
-              if (next) onCheck();
-              else onReopen();
-            }}
-            aria-label={completed ? "Reopen task" : "Mark task complete"}
-          />
-        )}
+      <div className="flex h-5 items-center">
+        <CompletionToggle
+          checked={completed}
+          pending={pending}
+          disabled={!canComplete}
+          size="md"
+          onChange={(next, origin) => {
+            if (next) onCheck(origin);
+            else onReopen();
+          }}
+        />
       </div>
 
       <div className="min-w-0 flex-1">

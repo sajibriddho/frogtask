@@ -31,13 +31,17 @@ import {
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { parseJsonSafe } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TaskFormModal } from "@/app/tasks/_components/TaskFormModal";
 import { ManageTagsModal } from "@/app/tasks/_components/ManageTagsModal";
 import { CompletionBurst } from "@/components/common/CompletionBurst";
+import { CompletionToggle } from "@/components/common/CompletionToggle";
+import {
+  CompletionLoading,
+  withMinDuration,
+} from "@/components/common/CompletionLoading";
 import type {
   TaskPriority,
   CalendarBucket,
@@ -90,8 +94,16 @@ export default function DashboardPage() {
   const [tags, setTags] = React.useState<TaskTag[]>([]);
   const [verified, setVerified] = React.useState<boolean | null>(null);
   const [celebrating, setCelebrating] =
-    React.useState<{ id: number; title: string } | null>(null);
+    React.useState<{
+      id: number;
+      title: string;
+      origin?: { x: number; y: number };
+    } | null>(null);
   const celebrationSeq = React.useRef(0);
+  const [completingTitle, setCompletingTitle] = React.useState<string | null>(
+    null,
+  );
+  const [completingId, setCompletingId] = React.useState<string | null>(null);
 
   const fetchTags = React.useCallback(async () => {
     if (!canCreateTask) return;
@@ -231,18 +243,28 @@ export default function DashboardPage() {
   );
 
   // ── Quick complete from dashboard ──────────────────────────────────
-  const toggleComplete = async (item: TodayTask) => {
+  const toggleComplete = async (
+    item: TodayTask,
+    origin?: { x: number; y: number },
+  ) => {
     if (!item.instance || !canCompleteToday) return;
+    const instanceId = item.instance.id;
+    if (completingId === instanceId) return;
     const next =
       item.instance.status === "completed" ? "pending" : "completed";
+    setCompletingId(instanceId);
+    if (next === "completed") setCompletingTitle(item.title);
     try {
-      const res = await fetch(`/api/task-instances/${item.instance.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
-      });
-      const json = await parseJsonSafe<{ success: boolean; error?: string }>(
-        res,
+      const json = await withMinDuration(
+        (async () => {
+          const res = await fetch(`/api/task-instances/${instanceId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: next }),
+          });
+          return parseJsonSafe<{ success: boolean; error?: string }>(res);
+        })(),
+        next === "completed" ? 700 : 0,
       );
       if (!json.success) {
         toast.error(json.error || "Failed to update task");
@@ -250,7 +272,11 @@ export default function DashboardPage() {
       }
       if (next === "completed") {
         celebrationSeq.current += 1;
-        setCelebrating({ id: celebrationSeq.current, title: item.title });
+        setCelebrating({
+          id: celebrationSeq.current,
+          title: item.title,
+          origin,
+        });
         toast.success("Task completed", { icon: "🐸" });
       } else {
         toast.success("Task reopened");
@@ -258,6 +284,9 @@ export default function DashboardPage() {
       fetchToday();
     } catch {
       toast.error("Failed to update task");
+    } finally {
+      setCompletingId(null);
+      setCompletingTitle(null);
     }
   };
 
@@ -421,13 +450,14 @@ export default function DashboardPage() {
                       key={item.instance?.id ?? item.id}
                       className="flex items-start gap-3 px-5 py-3"
                     >
-                      <div className="pt-0.5">
-                        <Checkbox
+                      <div className="flex h-5 items-center">
+                        <CompletionToggle
                           checked={completed}
+                          pending={completingId === item.instance?.id}
                           disabled={!canCompleteToday}
-                          onCheckedChange={() => toggleComplete(item)}
-                          aria-label={
-                            completed ? "Reopen task" : "Mark task complete"
+                          size="sm"
+                          onChange={(_next, origin) =>
+                            toggleComplete(item, origin)
                           }
                         />
                       </div>
@@ -519,10 +549,13 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      <CompletionLoading open={!!completingTitle} title={completingTitle} />
+
       {celebrating && (
         <CompletionBurst
           key={celebrating.id}
           title={celebrating.title}
+          origin={celebrating.origin}
           onDone={() => setCelebrating(null)}
         />
       )}
