@@ -33,6 +33,8 @@ import {
   Tag as TagIcon,
   MoreHorizontal,
   Infinity as InfinityIcon,
+  X,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -261,20 +263,39 @@ export default function AllTasksPage() {
   >(filtered, "createdAt", "desc");
 
   // Layer tag-grouping on top of the column sort: tag-name A→Z, untagged
-  // last; within each tag preserve the active sort order.
+  // last; within each tag completed tasks sink to the bottom, and within
+  // each band the active column sort order is preserved.
   const groupedSorted = React.useMemo(() => {
     const tagSortKey = (t: TaskWithInstance): string => {
       if (!t.tag_id) return "￿"; // push untagged to the end
       const meta = tagsById.get(t.tag_id);
       return meta ? meta.name.toLowerCase() : "￿";
     };
+    // Only single-instance schedules expose a meaningful "completed" flag in
+    // this view — daily/weekly completion lives on the Today screen.
+    const isCompleted = (t: TaskWithInstance): boolean => {
+      const single =
+        t.schedule_type === "date_specific" ||
+        t.schedule_type === "date_range" ||
+        t.schedule_type === "anytime";
+      return single && t.instance?.status === "completed";
+    };
     return [...sorted].sort((a, b) => {
       const aKey = tagSortKey(a);
       const bKey = tagSortKey(b);
-      if (aKey === bKey) return 0;
-      return aKey < bKey ? -1 : 1;
+      if (aKey !== bKey) return aKey < bKey ? -1 : 1;
+      const aDone = isCompleted(a);
+      const bDone = isCompleted(b);
+      if (aDone !== bDone) return aDone ? 1 : -1;
+      return 0;
     });
   }, [sorted, tagsById]);
+
+  const activeFilterCount =
+    (filterPriority ? 1 : 0) +
+    (filterSchedule ? 1 : 0) +
+    (filterStatus ? 1 : 0) +
+    (filterTag ? 1 : 0);
 
   const {
     pageData,
@@ -509,11 +530,36 @@ export default function AllTasksPage() {
             />
           </div>
           <div className="mt-3 flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              {tags.length === 0
-                ? "No tags yet — create one to start grouping your tasks."
-                : `${tags.length} tag${tags.length === 1 ? "" : "s"} available.`}
-            </p>
+            <div className="flex items-center gap-2 min-w-0">
+              {activeFilterCount > 0 ? (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    <Sparkles className="h-3 w-3" />
+                    {filtered.length} of {list.length}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setFilterPriority("");
+                      setFilterSchedule("");
+                      setFilterStatus("");
+                      setFilterTag("");
+                    }}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    Clear ({activeFilterCount})
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground truncate">
+                  {tags.length === 0
+                    ? "No tags yet — create one to start grouping your tasks."
+                    : `${tags.length} tag${tags.length === 1 ? "" : "s"} available.`}
+                </p>
+              )}
+            </div>
             <Button
               variant="outline"
               size="sm"
