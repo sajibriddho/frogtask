@@ -27,13 +27,6 @@ function hasPermission(permissionIds: string[], required: string): boolean {
 export default async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
-  // The root path is the public marketing landing page — let it through
-  // without an auth check. The page component itself decides whether to
-  // render the landing or redirect signed-in visitors to /dashboard.
-  if (pathname === "/") {
-    return NextResponse.next();
-  }
-
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
@@ -69,6 +62,6 @@ export const config = {
   // never invokes the middleware at all. login / register / etc. are
   // skipped via the negative lookahead as before.
   matcher: [
-    "/((?!api/auth|api/settings/public|_next/static|_next/image|favicon\\.ico|login|register|forgot-password|access-denied).+)",
+    "/((?!api/auth|api/settings/public|_next/static|_next/image|favicon\\.ico|login|register|forgot-password|access-denied).*)",
   ],
 };

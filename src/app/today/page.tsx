@@ -18,6 +18,7 @@ import {
   Circle,
   ListChecks,
   Pencil,
+  Plus,
   RotateCcw,
   Tag as TagIcon,
   AlertTriangle,
@@ -25,6 +26,8 @@ import {
   Loader2,
   Infinity as InfinityIcon,
 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 import { cn } from "@/lib/utils";
 import { parseJsonSafe } from "@/lib/api";
@@ -93,6 +96,7 @@ export default function TodayTasksPage() {
   const { has } = usePermissions();
   const canComplete = has("today.complete");
   const canUpdate = has("tasks.all.update");
+  const canCreate = has("tasks.all.create");
 
   const [items, setItems] = React.useState<TodayTask[]>([]);
   const [tags, setTags] = React.useState<TaskTag[]>([]);
@@ -101,7 +105,7 @@ export default function TodayTasksPage() {
   const [filter, setFilter] = React.useState<FilterChip>("all");
 
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
-  const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [formModalOpen, setFormModalOpen] = React.useState(false);
   const [manageTagsOpen, setManageTagsOpen] = React.useState(false);
   // One celebration overlay at a time. Keyed by task id so rapid clicks
   // restart the animation instead of stacking overlays.
@@ -352,11 +356,16 @@ export default function TodayTasksPage() {
         return;
       }
       setEditingTask({ ...(data.data as Task), id: item.id });
-      setEditModalOpen(true);
+      setFormModalOpen(true);
     } catch (err) {
       console.error("openEdit (today)", err);
       toast.error("Failed to load task");
     }
+  };
+
+  const handleCreate = () => {
+    setEditingTask(null);
+    setFormModalOpen(true);
   };
 
   const onTagsChanged = React.useCallback(() => {
@@ -383,25 +392,37 @@ export default function TodayTasksPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:flex">
-            <SummaryStat
-              icon={ListChecks}
-              label="Total"
-              value={counts.all}
-              tone="default"
-            />
-            <SummaryStat
-              icon={Circle}
-              label="Pending"
-              value={counts.pending}
-              tone="amber"
-            />
-            <SummaryStat
-              icon={CheckCircle2}
-              label="Completed"
-              value={counts.completed}
-              tone="emerald"
-            />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:flex">
+              <SummaryStat
+                icon={ListChecks}
+                label="Total"
+                value={counts.all}
+                tone="default"
+              />
+              <SummaryStat
+                icon={Circle}
+                label="Pending"
+                value={counts.pending}
+                tone="amber"
+              />
+              <SummaryStat
+                icon={CheckCircle2}
+                label="Completed"
+                value={counts.completed}
+                tone="emerald"
+              />
+            </div>
+            {canCreate && (
+              <Button
+                onClick={handleCreate}
+                className="shrink-0 shadow-sm shadow-primary/20"
+                title="Add a task for today"
+              >
+                <Plus className="h-4 w-4" />
+                Add task
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -540,9 +561,9 @@ export default function TodayTasksPage() {
       </div>
 
       <TaskFormModal
-        open={editModalOpen}
+        open={formModalOpen}
         onOpenChange={(o) => {
-          setEditModalOpen(o);
+          setFormModalOpen(o);
           if (!o) setEditingTask(null);
         }}
         task={editingTask}
