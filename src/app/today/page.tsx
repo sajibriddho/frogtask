@@ -192,21 +192,28 @@ export default function TodayTasksPage() {
       if (it.instance?.status === "completed") completed++;
       else pending++;
     }
+    const anytimeOpen = anytimeItems.filter(
+      (t) => t.instance?.status !== "completed",
+    ).length;
     return {
-      all: todayItems.length,
+      // "all" is the default to-do view and excludes completed tasks; the
+      // total/completed columns in the summary hero still see the full picture.
+      all: pending,
       pending,
       completed,
       unfinished: overdueItems.length,
-      anytime: anytimeItems.length,
+      anytime: anytimeOpen,
+      total: todayItems.length,
     };
   }, [todayItems, overdueItems, anytimeItems]);
 
   const filtered = React.useMemo(() => {
     if (filter === "unfinished") return overdueItems;
-    if (filter === "anytime") return anytimeItems;
-    if (filter === "all") return todayItems;
+    if (filter === "anytime")
+      return anytimeItems.filter((t) => t.instance?.status !== "completed");
     if (filter === "completed")
       return todayItems.filter((t) => t.instance?.status === "completed");
+    // Default to-do view ("all" or "pending"): completed tasks leave the list.
     return todayItems.filter((t) => t.instance?.status !== "completed");
   }, [todayItems, overdueItems, anytimeItems, filter]);
 
@@ -397,7 +404,7 @@ export default function TodayTasksPage() {
               <SummaryStat
                 icon={ListChecks}
                 label="Total"
-                value={counts.all}
+                value={counts.total}
                 tone="default"
               />
               <SummaryStat
@@ -490,7 +497,7 @@ export default function TodayTasksPage() {
             <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyToday filter={filter} totalToday={counts.all} />
+          <EmptyToday filter={filter} totalToday={counts.total} />
         ) : filter === "unfinished" ? (
           dateGroups.map(({ date, items: groupItems }) => (
             <section key={date} className="space-y-2">
@@ -861,7 +868,7 @@ function EmptyToday({
     if (filter === "completed") {
       title = "No completed tasks yet";
       description = "Tick a task off to see it here.";
-    } else if (filter === "pending") {
+    } else if (filter === "pending" || filter === "all") {
       title = "All caught up!";
       description = "Every task for today is checked off. Great work.";
     }

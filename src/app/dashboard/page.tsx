@@ -213,6 +213,13 @@ export default function DashboardPage() {
     return { total: todayOnly.length, pending, completed };
   }, [todayOnly]);
 
+  // The preview is a to-do list — once a task is ticked off it leaves the list.
+  const todayTodo = React.useMemo(
+    () =>
+      todayOnly.filter((t) => t.instance?.status !== "completed"),
+    [todayOnly],
+  );
+
   const upcomingCount = React.useMemo(() => {
     const todayIso = isoDay(startOfTodayUtc());
     let total = 0;
@@ -437,11 +444,15 @@ export default function DashboardPage() {
                   />
                 ))}
               </div>
-            ) : todayOnly.length === 0 ? (
-              <EmptyTodayInline canCreate={canCreateTask} onCreate={() => setCreateOpen(true)} />
+            ) : todayTodo.length === 0 ? (
+              <EmptyTodayInline
+                canCreate={canCreateTask}
+                onCreate={() => setCreateOpen(true)}
+                allDone={todayOnly.length > 0}
+              />
             ) : (
               <ul className="divide-y divide-border">
-                {todayOnly
+                {todayTodo
                   .slice(0, 6)
                   .map((item) => {
                   const completed = item.instance?.status === "completed";
@@ -495,13 +506,13 @@ export default function DashboardPage() {
                     </li>
                   );
                 })}
-                {todayOnly.length > 6 && canSeeToday && (
+                {todayTodo.length > 6 && canSeeToday && (
                   <li className="px-5 py-3 text-center">
                     <Link
                       href="/today"
                       className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
                     >
-                      + {todayOnly.length - 6} more in Today
+                      + {todayTodo.length - 6} more in Today
                     </Link>
                   </li>
                 )}
@@ -652,9 +663,11 @@ function StatCard({
 function EmptyTodayInline({
   canCreate,
   onCreate,
+  allDone,
 }: {
   canCreate: boolean;
   onCreate: () => void;
+  allDone?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
@@ -662,10 +675,12 @@ function EmptyTodayInline({
         <CheckCircle2 className="h-6 w-6" />
       </span>
       <h3 className="text-sm font-semibold text-foreground">
-        Nothing scheduled today
+        {allDone ? "All caught up!" : "Nothing scheduled today"}
       </h3>
       <p className="mt-1 text-xs text-muted-foreground max-w-xs">
-        You&apos;re all clear. Add a task to plan your day.
+        {allDone
+          ? "You've ticked off everything for today. Great work."
+          : "You're all clear. Add a task to plan your day."}
       </p>
       {canCreate && (
         <Button
