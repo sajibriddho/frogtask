@@ -119,15 +119,23 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const data = tasks.map((t) => {
-      const id = String(t._id);
-      const inst = instanceByTaskId.get(id);
-      return {
-        ...t,
-        id,
-        instance: inst ? { ...inst, id: String(inst._id) } : null,
-      };
-    });
+    const data = tasks
+      .map((t) => {
+        const id = String(t._id);
+        const inst = instanceByTaskId.get(id);
+        return {
+          ...t,
+          id,
+          instance: inst ? { ...inst, id: String(inst._id) } : null,
+        };
+      })
+      // Completed anytime tasks disappear from every list — once ticked off,
+      // the task is done and should not reappear on the All Tasks view.
+      .filter((t) => {
+        if (t.schedule_type !== "anytime") return true;
+        const status = (t.instance as { status?: string } | null)?.status;
+        return status !== "completed";
+      });
 
     return NextResponse.json({ success: true, data });
   } catch (err) {

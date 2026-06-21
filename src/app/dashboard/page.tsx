@@ -198,9 +198,15 @@ export default function DashboardPage() {
 
   // ── Counts ─────────────────────────────────────────────────────────
   // Overdue carry-overs live in the /today Unfinished tab — keep the dashboard
-  // summary scoped to today's schedule only.
+  // summary scoped to today's schedule only. Completed anytime tasks live
+  // exclusively on the Today page's Anytime tab; never tally them here.
   const todayOnly = React.useMemo(
-    () => today.filter((t) => !t.is_overdue),
+    () =>
+      today.filter(
+        (t) =>
+          !t.is_overdue &&
+          !(t.is_anytime && t.instance?.status === "completed"),
+      ),
     [today],
   );
   const counts = React.useMemo(() => {

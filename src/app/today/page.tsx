@@ -209,8 +209,17 @@ export default function TodayTasksPage() {
 
   const filtered = React.useMemo(() => {
     if (filter === "unfinished") return overdueItems;
-    if (filter === "anytime")
-      return anytimeItems.filter((t) => t.instance?.status !== "completed");
+    if (filter === "anytime") {
+      // Completed anytime tasks only live here — sink them to the bottom
+      // so the actionable items stay at the top of the list.
+      const open = anytimeItems.filter(
+        (t) => t.instance?.status !== "completed",
+      );
+      const done = anytimeItems.filter(
+        (t) => t.instance?.status === "completed",
+      );
+      return [...open, ...done];
+    }
     if (filter === "completed")
       return todayItems.filter((t) => t.instance?.status === "completed");
     // Default to-do view ("all" or "pending"): completed tasks leave the list.
@@ -521,25 +530,26 @@ export default function TodayTasksPage() {
             </section>
           ))
         ) : filter === "anytime" ? (
+          // Anytime is a single flat list (no per-tag headers) — render
+          // `filtered` directly so completed tasks sink to the absolute
+          // bottom instead of being scattered back into each tag block.
           <section className="space-y-2">
             <AnytimeGroupHeader count={anytimeItems.length} />
             <div className="space-y-2">
-              {tagGroups.flatMap(({ items: groupItems }) =>
-                groupItems.map((item) => (
-                  <TaskRow
-                    key={item.instance?.id ?? item.id}
-                    item={item}
-                    canComplete={canComplete}
-                    canEdit={canUpdate}
-                    pending={
-                      item.instance ? pendingIds.has(item.instance.id) : false
-                    }
-                    onCheck={(origin) => handleComplete(item, origin)}
-                    onReopen={() => handleReopen(item)}
-                    onEdit={() => handleEdit(item)}
-                  />
-                )),
-              )}
+              {filtered.map((item) => (
+                <TaskRow
+                  key={item.instance?.id ?? item.id}
+                  item={item}
+                  canComplete={canComplete}
+                  canEdit={canUpdate}
+                  pending={
+                    item.instance ? pendingIds.has(item.instance.id) : false
+                  }
+                  onCheck={(origin) => handleComplete(item, origin)}
+                  onReopen={() => handleReopen(item)}
+                  onEdit={() => handleEdit(item)}
+                />
+              ))}
             </div>
           </section>
         ) : (
@@ -720,17 +730,22 @@ function TaskRow({
   const completed = item.instance?.status === "completed";
   const isRange = item.schedule_type === "date_range";
   const isAnytime = item.is_anytime || item.schedule_type === "anytime";
+  // Completed anytime tasks only ever appear in the Anytime tab — flag them
+  // with a green "done" accent so they read as resolved at a glance.
+  const anytimeDone = isAnytime && completed;
 
   return (
     <div
       className={cn(
         "group flex items-start gap-3 rounded-2xl border bg-card px-4 py-3 sm:px-5 sm:py-4 transition-colors",
-        isAnytime
-          ? "border-l-4 border-l-yellow-500 border-y-border border-r-border bg-yellow-50/40 dark:bg-yellow-500/5"
-          : isRange
-            ? "border-l-4 border-l-violet-500 border-y-border border-r-border bg-violet-50/40 dark:bg-violet-500/5"
-            : "border-border",
-        completed && "bg-muted/30 border-dashed",
+        anytimeDone
+          ? "border-l-4 border-l-emerald-500 border-y-border border-r-border bg-emerald-50/50 dark:bg-emerald-500/10"
+          : isAnytime
+            ? "border-l-4 border-l-yellow-500 border-y-border border-r-border bg-yellow-50/40 dark:bg-yellow-500/5"
+            : isRange
+              ? "border-l-4 border-l-violet-500 border-y-border border-r-border bg-violet-50/40 dark:bg-violet-500/5"
+              : "border-border",
+        completed && !anytimeDone && "bg-muted/30 border-dashed",
         pending && "opacity-75",
       )}
     >
@@ -775,13 +790,23 @@ function TaskRow({
             </span>
           )}
           {isAnytime && (
-            <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300"
-              title="Anytime task — no deadline; sits here until you check it off"
-            >
-              <InfinityIcon className="h-3 w-3" />
-              Anytime
-            </span>
+            anytimeDone ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                title="Anytime task — marked done"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Done
+              </span>
+            ) : (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300"
+                title="Anytime task — no deadline; sits here until you check it off"
+              >
+                <InfinityIcon className="h-3 w-3" />
+                Anytime
+              </span>
+            )
           )}
         </div>
 
